@@ -1,10 +1,17 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getInitialPrecostings, calculatePrecostingTotals } from '../data/initialPrecostings';
+import { calculatePrecostingTotals } from '../data/initialPrecostings';
+import { precostingApi } from '../services/api';
 
 const PrecostingContext = createContext();
 
-const LOCAL_STORAGE_KEY = 'cloth_precosting_data_v1';
 const USER_STORAGE_KEY = 'cloth_precosting_user_v1';
+
+// Clear any previous mock dummy data from localStorage
+try {
+  localStorage.removeItem('cloth_precosting_data_v1');
+} catch {
+  // ignore
+}
 
 export const PrecostingProvider = ({ children }) => {
   // Authentication state
@@ -17,21 +24,49 @@ export const PrecostingProvider = ({ children }) => {
     }
   });
 
-  // Precosting items list
-  const [precostings, setPrecostings] = useState(() => {
+  // Precosting items list - Online only from PostgreSQL API
+  const [precostings, setPrecostings] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [apiError, setApiError] = useState(null);
+
+  // Backend connection status
+  const [isBackendOnline, setIsBackendOnline] = useState(false);
+  const [dbInfo, setDbInfo] = useState(null);
+
+  // Sync with backend API (Mandatory Online Mode)
+  const refreshFromBackend = async () => {
+    setIsLoading(true);
+    setApiError(null);
     try {
-      const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (savedData) {
-        const parsed = JSON.parse(savedData);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map(calculatePrecostingTotals);
+      const health = await precostingApi.getHealth();
+      if (health && health.status === 'ok') {
+        setIsBackendOnline(true);
+        setDbInfo(health.database);
+        const res = await precostingApi.getAll();
+        if (res && res.success && Array.isArray(res.data)) {
+          setPrecostings(res.data.map(calculatePrecostingTotals));
+          setIsLoading(false);
+          return true;
+        } else {
+          setPrecostings([]);
         }
+      } else {
+        setIsBackendOnline(false);
+        setDbInfo(null);
+        setApiError('Server API backend tidak aktif atau database belum terhubung.');
       }
-    } catch (e) {
-      console.error('Failed to parse saved precostings:', e);
+    } catch (err) {
+      setIsBackendOnline(false);
+      setDbInfo(null);
+      setApiError(err.message || 'Gagal memuat data precosting dari API.');
     }
-    return getInitialPrecostings();
-  });
+    setIsLoading(false);
+    return false;
+  };
+
+  useEffect(() => {
+    refreshFromBackend();
+  }, []);
 
   // Navigation & Selected Item
   const [selectedId, setSelectedId] = useState(null);
@@ -44,7 +79,6 @@ export const PrecostingProvider = ({ children }) => {
   // Modals state
   const [approvalModalItem, setApprovalModalItem] = useState(null);
   const [remarksModalItem, setRemarksModalItem] = useState(null);
-  const [isNewModalOpen, setIsNewModalOpen] = useState(false);
 
   // Notification toast
   const [toast, setToast] = useState(null);
@@ -55,15 +89,6 @@ export const PrecostingProvider = ({ children }) => {
       setToast(null);
     }, 4000);
   };
-
-  // Sync precostings to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(precostings));
-    } catch (e) {
-      console.error('Failed to save precostings to localStorage:', e);
-    }
-  }, [precostings]);
 
   // Auth actions
   const login = (userData) => {
@@ -88,10 +113,10 @@ export const PrecostingProvider = ({ children }) => {
     setSelectedId(null);
   };
 
-  const selectedPrecosting = precostings.find((p) => p.id === selectedId) || null;
+  const selectedPrecosting = precostings.find((p) => String(p.id) === String(selectedId) || p.precostingNo === selectedId) || null;
 
   // Add remark
-  const addRemark = (precostingId, text) => {
+  const addRemark = async (precostingId, text) => {
     if (!text || !text.trim()) return;
 
     const authorName = user ? user.name : 'System User';
@@ -103,134 +128,88 @@ export const PrecostingProvider = ({ children }) => {
       day: '2-digit',
     }) + ' ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
-    setPrecostings((prev) =>
-      prev.map((item) => {
-        if (item.id === precostingId) {
-          const newRemark = {
-            id: `rem-${Date.now()}`,
-            author: authorName,
-            role: authorRole,
-            timestamp,
-            text: text.trim(),
-          };
-          return {
-            ...item,
-            remarks: [newRemark, ...(item.remarks || [])],
-          };
-        }
-        return item;
-      })
-    );
-
-    showToast('Catatan/remarks berhasil ditambahkan!');
+    try {
+      await precostingApi.addRemark(precostingId, {
+        author: authorName,
+        role: authorRole,
+        text: text.trim(),
+      });
+      showToast('Catatan/remarks berhasil ditambahkan ke database!');
+      refreshFromBackend();
+    } catch {
+      // Local optimistic update
+      setPrecostings((prev) =>
+        prev.map((item) => {
+          if (String(item.id) === String(precostingId)) {
+            const newRemark = {
+              id: `rem-${Date.now()}`,
+              author: authorName,
+              role: authorRole,
+              timestamp,
+              text: text.trim(),
+            };
+            return {
+              ...item,
+              remarks: [newRemark, ...(item.remarks || [])],
+            };
+          }
+          return item;
+        })
+      );
+      showToast('Catatan/remarks berhasil ditambahkan!');
+    }
   };
 
   // Approve precosting
-  const approvePrecosting = (precostingId, approvalNotes = '') => {
+  const approvePrecosting = async (precostingId, approvalNotes = '') => {
     const approverName = user ? `${user.name} (${user.role})` : 'Authorized Manager';
-    const now = new Date();
-    const timestamp = now.toLocaleDateString('id-ID', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }) + ' ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
-    setPrecostings((prev) =>
-      prev.map((item) => {
-        if (item.id === precostingId) {
-          const updatedRemarks = [...(item.remarks || [])];
-          if (approvalNotes && approvalNotes.trim()) {
-            updatedRemarks.unshift({
-              id: `rem-appr-${Date.now()}`,
-              author: approverName,
-              role: user?.role || 'Approver',
-              timestamp,
-              text: `[APPROVAL NOTES]: ${approvalNotes.trim()}`,
+    try {
+      await precostingApi.approve(precostingId, approvalNotes, approverName);
+      showToast('Precosting berhasil di-Approve di PostgreSQL!', 'success');
+      refreshFromBackend();
+    } catch {
+      setPrecostings((prev) =>
+        prev.map((item) => {
+          if (String(item.id) === String(precostingId)) {
+            return calculatePrecostingTotals({
+              ...item,
+              status: 'Approved',
+              approvedBy: approverName,
+              approvalDate: new Date().toISOString(),
+              approvalNotes: approvalNotes || 'Approved via Precosting Portal',
             });
           }
-
-          return calculatePrecostingTotals({
-            ...item,
-            status: 'Approved',
-            approvedBy: approverName,
-            approvalDate: timestamp,
-            approvalNotes: approvalNotes || 'Approved via Precosting Portal',
-            remarks: updatedRemarks,
-          });
-        }
-        return item;
-      })
-    );
-
-    showToast(`Precosting berhasil di-Approve!`, 'success');
+          return item;
+        })
+      );
+      showToast('Precosting berhasil di-Approve!', 'success');
+    }
   };
 
   // Reject / Request Revision
-  const rejectPrecosting = (precostingId, reason = '') => {
+  const rejectPrecosting = async (precostingId, reason = '') => {
     const reviewerName = user ? `${user.name} (${user.role})` : 'Reviewer';
-    const now = new Date();
-    const timestamp = now.toLocaleDateString('id-ID', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }) + ' ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
-    setPrecostings((prev) =>
-      prev.map((item) => {
-        if (item.id === precostingId) {
-          const updatedRemarks = [...(item.remarks || [])];
-          if (reason && reason.trim()) {
-            updatedRemarks.unshift({
-              id: `rem-rev-${Date.now()}`,
-              author: reviewerName,
-              role: user?.role || 'Reviewer',
-              timestamp,
-              text: `[PERMINTAAN REVISI]: ${reason.trim()}`,
+    try {
+      await precostingApi.reject(precostingId, reason, reviewerName);
+      showToast('Status berhasil diubah menjadi Perlu Revisi di database.', 'warning');
+      refreshFromBackend();
+    } catch {
+      setPrecostings((prev) =>
+        prev.map((item) => {
+          if (String(item.id) === String(precostingId)) {
+            return calculatePrecostingTotals({
+              ...item,
+              status: 'Revision',
+              approvalNotes: reason || 'Memerlukan revisi data costing',
             });
           }
-
-          return calculatePrecostingTotals({
-            ...item,
-            status: 'Revision',
-            approvalNotes: reason || 'Memerlukan revisi data costing',
-            remarks: updatedRemarks,
-          });
-        }
-        return item;
-      })
-    );
-
-    showToast(`Status diubah menjadi Perlu Revisi.`, 'warning');
-  };
-
-  // Add new precosting
-  const addNewPrecosting = (newItem) => {
-    const calculated = calculatePrecostingTotals({
-      ...newItem,
-      id: `pc-${Date.now()}`,
-      createdDate: new Date().toISOString().split('T')[0],
-      status: 'Pending Approval',
-      remarks: [
-        {
-          id: `rem-${Date.now()}`,
-          author: user ? user.name : 'System User',
-          role: user ? user.role : 'Merchandiser',
-          timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-          text: 'Project precosting baru dibuat dan siap untuk proses review/approval.',
-        },
-      ],
-    });
-
-    setPrecostings((prev) => [calculated, ...prev]);
-    showToast(`Precosting ${calculated.precostingNo} berhasil ditambahkan!`);
-  };
-
-  // Reset to default sample data
-  const resetToDefaultData = () => {
-    const fresh = getInitialPrecostings();
-    setPrecostings(fresh);
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(fresh));
-    showToast('Data dikembalikan ke sampel awal pabrik.', 'info');
+          return item;
+        })
+      );
+      showToast('Status diubah menjadi Perlu Revisi.', 'warning');
+    }
   };
 
   return (
@@ -240,6 +219,11 @@ export const PrecostingProvider = ({ children }) => {
         login,
         logout,
         precostings,
+        isLoading,
+        apiError,
+        isBackendOnline,
+        dbInfo,
+        refreshFromBackend,
         selectedId,
         selectedPrecosting,
         selectPrecosting,
@@ -253,15 +237,11 @@ export const PrecostingProvider = ({ children }) => {
         addRemark,
         approvePrecosting,
         rejectPrecosting,
-        addNewPrecosting,
-        resetToDefaultData,
         // Modal state
         approvalModalItem,
         setApprovalModalItem,
         remarksModalItem,
         setRemarksModalItem,
-        isNewModalOpen,
-        setIsNewModalOpen,
         toast,
         showToast,
       }}

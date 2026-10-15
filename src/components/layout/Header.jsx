@@ -1,26 +1,23 @@
 import React from 'react';
 import { usePrecosting } from '../../context/PrecostingContext';
-import { 
-  Scissors, 
-  Layers, 
-  PlusCircle, 
-  LogOut, 
-  User, 
-  ShieldCheck, 
-  RotateCcw,
+import {
+  Scissors,
+  LogOut,
+  User,
+  ShieldCheck,
   Menu,
   X,
-  FileSpreadsheet
+  Database
 } from 'lucide-react';
 
 export const Header = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
-  const { 
-    user, 
-    logout, 
-    selectedPrecosting, 
-    clearSelectedPrecosting, 
-    setIsNewModalOpen,
-    resetToDefaultData 
+  const {
+    user,
+    logout,
+    selectedPrecosting,
+    clearSelectedPrecosting,
+    isBackendOnline,
+    dbInfo
   } = usePrecosting();
 
   return (
@@ -28,7 +25,7 @@ export const Header = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
       <div className="header-container">
         {/* Brand Logo & Title */}
         <div className="brand-section">
-          <button 
+          <button
             type="button"
             className="mobile-toggle-btn"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -50,48 +47,9 @@ export const Header = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
           </div>
         </div>
 
-        {/* Center Breadcrumb or Status */}
-        <div className="header-center">
-          {selectedPrecosting ? (
-            <div className="breadcrumb-pill">
-              <button onClick={clearSelectedPrecosting} className="breadcrumb-link">
-                Dashboard Grid
-              </button>
-              <span className="breadcrumb-separator">/</span>
-              <span className="breadcrumb-current">
-                {selectedPrecosting.precostingNo}
-              </span>
-            </div>
-          ) : (
-            <div className="portal-badge">
-              <Layers size={14} className="badge-icon" />
-              <span>COGS • COGM • HPP Management System</span>
-            </div>
-          )}
-        </div>
 
         {/* Right Action Tools & User Profile */}
         <div className="header-actions">
-          <button 
-            type="button"
-            className="btn-header-secondary" 
-            onClick={() => setIsNewModalOpen(true)}
-            title="Buat Precosting Baru"
-          >
-            <PlusCircle size={16} />
-            <span className="btn-text">Tambah Precosting</span>
-          </button>
-
-          <button 
-            type="button"
-            className="btn-header-ghost" 
-            onClick={resetToDefaultData}
-            title="Reset ke Sampel Awal Pabrik"
-          >
-            <RotateCcw size={15} />
-            <span className="btn-text-desktop">Reset Sampel</span>
-          </button>
-
           {/* User profile dropdown / info */}
           {user && (
             <div className="user-profile-badge">
@@ -107,9 +65,9 @@ export const Header = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
                 <div className="user-role">{user.role}</div>
               </div>
 
-              <button 
+              <button
                 type="button"
-                className="btn-logout" 
+                className="btn-logout"
                 onClick={logout}
                 title="Keluar / Logout"
                 aria-label="Logout"

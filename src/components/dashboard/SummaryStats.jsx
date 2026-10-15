@@ -29,82 +29,94 @@ export const SummaryStats = () => {
   );
 
   return (
-    <div className="summary-stats-grid">
+    <div className="summary-stats-compact-row">
       {/* Total Precosting Card */}
       <div 
-        className={`stat-card ${statusFilter === 'ALL' ? 'active-filter' : ''}`}
+        className={`stat-compact-card ${statusFilter === 'ALL' ? 'active-filter' : ''}`}
         onClick={() => setStatusFilter('ALL')}
         role="button"
         tabIndex={0}
+        title="Klik untuk melihat semua precosting"
       >
-        <div className="stat-card-header">
-          <span className="stat-card-title">Total Precosting</span>
-          <div className="stat-icon-wrapper info">
-            <Layers size={18} />
+        <div className="stat-compact-icon info">
+          <Layers size={16} />
+        </div>
+        <div className="stat-compact-body">
+          <span className="stat-compact-title">Total Precosting</span>
+          <div className="stat-compact-val">
+            {totalCount} <span className="stat-compact-unit">Item</span>
           </div>
         </div>
-        <div className="stat-card-value">{totalCount}</div>
-        <div className="stat-card-desc">Semua data model pakaian</div>
       </div>
 
       {/* Pending Approval Card */}
       <div 
-        className={`stat-card warning-card ${statusFilter === 'Pending Approval' ? 'active-filter' : ''}`}
+        className={`stat-compact-card warning-card ${statusFilter === 'Pending Approval' ? 'active-filter' : ''}`}
         onClick={() => setStatusFilter(statusFilter === 'Pending Approval' ? 'ALL' : 'Pending Approval')}
         role="button"
         tabIndex={0}
+        title="Klik untuk filter: Menunggu Approval"
       >
-        <div className="stat-card-header">
-          <span className="stat-card-title">Menunggu Approval</span>
-          <div className="stat-icon-wrapper warning">
-            <Clock size={18} />
+        <div className="stat-compact-icon warning">
+          <Clock size={16} />
+        </div>
+        <div className="stat-compact-body">
+          <span className="stat-compact-title">Menunggu Approval</span>
+          <div className="stat-compact-val text-amber">
+            {pendingCount} <span className="stat-compact-unit">Model</span>
           </div>
         </div>
-        <div className="stat-card-value text-amber">{pendingCount}</div>
-        <div className="stat-card-desc">Butuh tinjauan & otorisasi</div>
       </div>
 
       {/* Approved Card */}
       <div 
-        className={`stat-card success-card ${statusFilter === 'Approved' ? 'active-filter' : ''}`}
+        className={`stat-compact-card success-card ${statusFilter === 'Approved' ? 'active-filter' : ''}`}
         onClick={() => setStatusFilter(statusFilter === 'Approved' ? 'ALL' : 'Approved')}
         role="button"
         tabIndex={0}
+        title="Klik untuk filter: Sudah Disetujui"
       >
-        <div className="stat-card-header">
-          <span className="stat-card-title">Sudah Disetujui</span>
-          <div className="stat-icon-wrapper success">
-            <CheckCircle2 size={18} />
+        <div className="stat-compact-icon success">
+          <CheckCircle2 size={16} />
+        </div>
+        <div className="stat-compact-body">
+          <span className="stat-compact-title">Sudah Disetujui</span>
+          <div className="stat-compact-val text-emerald">
+            {approvedCount} <span className="stat-compact-unit">Model</span>
           </div>
         </div>
-        <div className="stat-card-value text-emerald">{approvedCount}</div>
-        <div className="stat-card-desc">Siap rilis ke order produksi</div>
       </div>
 
       {/* Target Qty Card */}
-      <div className="stat-card">
-        <div className="stat-card-header">
-          <span className="stat-card-title">Target Qty Produksi</span>
-          <div className="stat-icon-wrapper purple">
-            <Package size={18} />
+      <div 
+        className="stat-compact-card"
+        title="Total akumulasi kuantitas produksi"
+      >
+        <div className="stat-compact-icon purple">
+          <Package size={16} />
+        </div>
+        <div className="stat-compact-body">
+          <span className="stat-compact-title">Target Qty Produksi</span>
+          <div className="stat-compact-val font-mono">
+            {formatNumber(totalTargetQty)} <span className="stat-compact-unit">Pcs</span>
           </div>
         </div>
-        <div className="stat-card-value">{formatNumber(totalTargetQty)} <span className="stat-unit">Pcs</span></div>
-        <div className="stat-card-desc">Akumulasi seluruh batch order</div>
       </div>
 
       {/* Total Production Cost / HPP Value */}
-      <div className="stat-card highlight-card">
-        <div className="stat-card-header">
-          <span className="stat-card-title">Total Estimasi HPP</span>
-          <div className="stat-icon-wrapper primary">
-            <TrendingUp size={18} />
+      <div 
+        className="stat-compact-card highlight-card"
+        title="Total estimasi biaya modal produksi (HPP)"
+      >
+        <div className="stat-compact-icon primary">
+          <TrendingUp size={16} />
+        </div>
+        <div className="stat-compact-body">
+          <span className="stat-compact-title">Total Estimasi HPP</span>
+          <div className="stat-compact-val font-mono text-primary-gradient">
+            {formatRupiah(totalProductionValue)}
           </div>
         </div>
-        <div className="stat-card-value font-mono text-primary-gradient">
-          {formatRupiah(totalProductionValue)}
-        </div>
-        <div className="stat-card-desc">Nilai total modal kain + acc + jasa</div>
       </div>
     </div>
   );

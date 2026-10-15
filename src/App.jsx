@@ -8,7 +8,6 @@ import { PrecostingGrid } from './components/dashboard/PrecostingGrid';
 import { PrecostingDetail } from './components/detail/PrecostingDetail';
 import { ApprovalModal } from './components/modals/ApprovalModal';
 import { RemarksModal } from './components/modals/RemarksModal';
-import { NewPrecostingModal } from './components/modals/NewPrecostingModal';
 import { Toast } from './components/common/Toast';
 import './App.css';
 
@@ -56,7 +55,6 @@ function MainPortal() {
       {/* Modals & Popups */}
       <ApprovalModal />
       <RemarksModal />
-      <NewPrecostingModal />
       <Toast />
     </div>
   );

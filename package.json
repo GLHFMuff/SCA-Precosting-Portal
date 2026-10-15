@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "server": "node server/src/index.js",
+    "server:dev": "node --watch server/src/index.js",
+    "db:init": "node server/src/db/initDb.js",
+    "db:seed": "node server/src/db/seed.js"
   },
   "dependencies": {
     "lucide-react": "^1.55.0",

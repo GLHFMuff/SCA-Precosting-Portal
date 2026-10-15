@@ -1,12 +1,8 @@
 import React from 'react';
 import { usePrecosting } from '../../context/PrecostingContext';
 import { 
-  Home, 
   Grid, 
-  PlusCircle, 
   ShieldCheck, 
-  MessageSquare, 
-  RotateCcw, 
   LogOut, 
   X,
   FileSpreadsheet
@@ -17,8 +13,6 @@ export const MobileDrawer = ({ isOpen, onClose }) => {
     user, 
     logout, 
     clearSelectedPrecosting, 
-    setIsNewModalOpen, 
-    resetToDefaultData, 
     statusFilter, 
     setStatusFilter,
     precostings 
@@ -49,7 +43,7 @@ export const MobileDrawer = ({ isOpen, onClose }) => {
             </div>
             <div>
               <div className="drawer-user-name">{user.name}</div>
-              <div className="drawer-user-role">{user.role} ({user.email})</div>
+              <div className="drawer-user-role">{user.role} ({user.email || user.username})</div>
             </div>
           </div>
         )}
@@ -60,6 +54,7 @@ export const MobileDrawer = ({ isOpen, onClose }) => {
             className="drawer-nav-item"
             onClick={() => {
               clearSelectedPrecosting();
+              setStatusFilter('ALL');
               onClose();
             }}
           >
@@ -90,33 +85,11 @@ export const MobileDrawer = ({ isOpen, onClose }) => {
             <FileSpreadsheet size={18} />
             <span>Sudah Disetujui ({approvedCount})</span>
           </button>
-
-          <button 
-            className="drawer-nav-item primary-action"
-            onClick={() => {
-              setIsNewModalOpen(true);
-              onClose();
-            }}
-          >
-            <PlusCircle size={18} />
-            <span>+ Buat Precosting Baru</span>
-          </button>
         </div>
 
         <div className="drawer-divider" />
 
         <div className="drawer-footer">
-          <button 
-            className="drawer-btn-ghost"
-            onClick={() => {
-              resetToDefaultData();
-              onClose();
-            }}
-          >
-            <RotateCcw size={16} />
-            <span>Reset Data Contoh</span>
-          </button>
-
           <button 
             className="drawer-btn-danger"
             onClick={() => {

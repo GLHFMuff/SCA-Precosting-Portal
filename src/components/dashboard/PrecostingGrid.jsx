@@ -1,35 +1,46 @@
 import React, { useState } from 'react';
 import { usePrecosting } from '../../context/PrecostingContext';
 import { formatRupiah, formatNumber } from '../../utils/formatters';
-import { 
-  Search, 
-  Filter, 
-  Eye, 
-  MessageSquare, 
-  CheckCircle, 
-  Clock, 
-  AlertTriangle, 
-  FileCheck2, 
-  ArrowUpDown, 
-  LayoutGrid, 
-  List, 
+import {
+  Search,
+  Filter,
+  Eye,
+  MessageSquare,
+  CheckCircle,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  AlertTriangle,
+  FileCheck2,
+  ArrowUpDown,
+  LayoutGrid,
+  List,
   Layers,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Database,
+  RotateCw
 } from 'lucide-react';
 
 export const PrecostingGrid = () => {
-  const { 
-    precostings, 
-    selectPrecosting, 
-    searchTerm, 
-    setSearchTerm, 
-    statusFilter, 
+  const {
+    precostings,
+    isLoading,
+    apiError,
+    selectPrecosting,
+    searchTerm,
+    setSearchTerm,
+    statusFilter,
     setStatusFilter,
     sortBy,
     setSortBy,
     setApprovalModalItem,
-    setRemarksModalItem
+    setRemarksModalItem,
+    approvePrecosting,
+    rejectPrecosting,
+    showToast,
+    isBackendOnline,
+    refreshFromBackend
   } = usePrecosting();
 
   // Mobile layout mode toggle: 'card' (optimal for HP) or 'table' (compact scrollable)
@@ -37,13 +48,13 @@ export const PrecostingGrid = () => {
 
   // Filter & Search
   const filteredItems = precostings.filter((item) => {
-    const matchesSearch = 
+    const matchesSearch =
       item.precostingNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item.buyer && item.buyer.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (item.category && item.category.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    const matchesStatus = 
+    const matchesStatus =
       statusFilter === 'ALL' || item.status === statusFilter;
 
     return matchesSearch && matchesStatus;
@@ -58,7 +69,7 @@ export const PrecostingGrid = () => {
       return (Number(b.targetQty) || 0) - (Number(a.targetQty) || 0);
     }
     if (sortBy === 'cost-desc') {
-      return (Number(b.hppAllQty) || 0) - (Number(a.hppAllQty) || 0);
+      return (Number(b.hppPerPcs) || 0) - (Number(a.hppPerPcs) || 0);
     }
     if (sortBy === 'name-asc') {
       return a.itemName.localeCompare(b.itemName);
@@ -71,28 +82,51 @@ export const PrecostingGrid = () => {
       case 'Approved':
         return (
           <span className="badge badge-success">
-            <CheckCircle size={13} className="badge-icon-left" /> Disetujui
+            <CheckCircle size={12} className="badge-icon-left" /> Disetujui
           </span>
         );
       case 'Pending Approval':
         return (
           <span className="badge badge-warning">
-            <Clock size={13} className="badge-icon-left" /> Menunggu Otorisasi
+            <Clock size={12} className="badge-icon-left" /> Menunggu Otorisasi
           </span>
         );
       case 'Revision':
         return (
           <span className="badge badge-danger">
-            <AlertTriangle size={13} className="badge-icon-left" /> Perlu Revisi
+            <AlertTriangle size={12} className="badge-icon-left" /> Perlu Revisi
           </span>
         );
       case 'Draft':
       default:
         return (
           <span className="badge badge-secondary">
-            Drafting
+            Draft
           </span>
         );
+    }
+  };
+
+  const handleApprove = (item) => {
+    if (item.status === 'Approved') {
+      // Jika sudah disetujui, buka summary modal
+      setApprovalModalItem(item);
+    } else {
+      approvePrecosting(item.id, 'Disetujui langsung melalui Action Grid');
+    }
+  };
+
+  const handleReject = (item) => {
+    if (item.status === 'Revision') {
+      if (showToast) showToast(`Precosting ${item.precostingNo} sudah berstatus Revisi / Not Approved.`, 'info');
+      return;
+    }
+    const note = window.prompt(
+      `Konfirmasi Not Approve untuk ${item.precostingNo} (${item.itemName}):\nMasukkan catatan revisi / alasan:`,
+      'Perlu penyesuaian biaya / konsumsi bahan'
+    );
+    if (note !== null) {
+      rejectPrecosting(item.id, note.trim() || 'Not Approved via Dashboard Precosting');
     }
   };
 
@@ -110,8 +144,8 @@ export const PrecostingGrid = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
           {searchTerm && (
-            <button 
-              type="button" 
+            <button
+              type="button"
               className="clear-search-btn"
               onClick={() => setSearchTerm('')}
             >
@@ -152,8 +186,8 @@ export const PrecostingGrid = () => {
               >
                 <option value="date-desc">Terbaru</option>
                 <option value="qty-desc">Target Qty Terbesar</option>
-                <option value="cost-desc">Total Biaya Terbesar</option>
-                <option value="name-asc">Nama Item (A-Z)</option>
+                <option value="cost-desc">HPP Terbesar</option>
+                <option value="name-asc">Nama Style (A-Z)</option>
               </select>
             </div>
 
@@ -182,10 +216,30 @@ export const PrecostingGrid = () => {
 
       {/* Grid Results Header info */}
       <div className="grid-meta-bar">
-        <span className="results-count">
-          Menampilkan <strong>{sortedItems.length}</strong> dari {precostings.length} Precosting
-        </span>
-        <span className="currency-hint">Mata Uang: IDR (Rupiah) • Biaya per Pcs & Semua Qty</span>
+        <div className="grid-meta-left">
+          <span className="results-count">
+            Menampilkan <strong>{sortedItems.length}</strong> dari {precostings.length} Precosting
+          </span>
+        </div>
+        <div className="grid-meta-right">
+          <button
+            type="button"
+            className="btn-sync-refresh"
+            onClick={async () => {
+              const ok = await refreshFromBackend();
+              if (ok) {
+                if (showToast) showToast('Data berhasil disinkronkan', 'success');
+              } else {
+                if (showToast) showToast('Gagal memuat dari backend API.', 'error');
+              }
+            }}
+            title="Muat ulang data terbaru dari PostgreSQL via API"
+          >
+            <RotateCw size={13} className="sync-icon" />
+            <span>Reload</span>
+          </button>
+          <span className="currency-hint">Mata Uang: IDR (Rupiah) • Biaya per Pcs</span>
+        </div>
       </div>
 
       {/* Main Table View (Desktop & Responsive Scroll) */}
@@ -194,106 +248,193 @@ export const PrecostingGrid = () => {
           <table className="precosting-table">
             <thead>
               <tr>
-                <th className="th-center" style={{ width: '45px' }}>No</th>
-                <th style={{ width: '130px' }}>Nomor Precosting</th>
-                <th style={{ minWidth: '220px' }}>Nama Item</th>
-                <th className="th-right" style={{ minWidth: '135px' }}>
-                  Total Harga Fabric<br />
-                  <span className="th-sub">per kain (pcs)</span>
-                </th>
-                <th className="th-right" style={{ minWidth: '135px' }}>
-                  Total Harga Acc<br />
-                  <span className="th-sub">per kain (pcs)</span>
-                </th>
-                <th className="th-right" style={{ minWidth: '130px' }}>
-                  Total Harga Jasa<br />
-                  <span className="th-sub">per kain (pcs)</span>
-                </th>
+                <th style={{ minWidth: '130px' }}>Nomor Precosting</th>
+                <th className="th-center" style={{ width: '65px' }}>Image</th>
                 <th className="th-center" style={{ minWidth: '105px' }}>
-                  Target Qty<br />
+                  Qty Produksi<br />
                   <span className="th-sub">(Pcs)</span>
                 </th>
-                <th className="th-right" style={{ minWidth: '120px' }}>
-                  HPP per Kain<br />
+                <th style={{ minWidth: '220px' }}>Nama Style</th>
+                <th className="th-center" style={{ minWidth: '95px' }}>
+                  Consm<br />
                   <span className="th-sub">(per pcs)</span>
                 </th>
-                <th className="th-right" style={{ minWidth: '145px' }}>
-                  Biaya Semua Qty<br />
-                  <span className="th-sub">(Total HPP)</span>
+                <th className="th-right" style={{ minWidth: '120px' }}>
+                  Harga Fabric<br />
+                  <span className="th-sub">(per unit)</span>
                 </th>
-                <th className="th-center" style={{ minWidth: '125px' }}>Status</th>
-                <th className="th-center" style={{ minWidth: '180px' }}>Aksi</th>
+                <th className="th-right" style={{ minWidth: '140px' }}>
+                  Total Kain<br />
+                  <span className="th-sub">(Harga Fabric × Consm)</span>
+                </th>
+                <th className="th-right" style={{ minWidth: '130px' }}>
+                  Harga CMT<br />
+                  <span className="th-sub">(Total Jasa)</span>
+                </th>
+                <th className="th-right" style={{ minWidth: '125px' }}>
+                  Harga Accesories<br />
+                  <span className="th-sub">(Acc per pcs)</span>
+                </th>
+                <th className="th-right" style={{ minWidth: '120px' }}>
+                  HPP<br />
+                  <span className="th-sub">(per pcs)</span>
+                </th>
+                <th className="th-right" style={{ minWidth: '110px' }}>
+                  PPN<br />
+                  <span className="th-sub">(11%)</span>
+                </th>
+                <th className="th-center" style={{ minWidth: '235px' }}>
+                  Action<br />
+                  <span className="th-sub">(Detail & Approval)</span>
+                </th>
               </tr>
             </thead>
             <tbody>
-              {sortedItems.length === 0 ? (
+              {isLoading ? (
                 <tr>
-                  <td colSpan="11" className="empty-state-cell">
+                  <td colSpan="12" className="empty-state-cell">
+                    <div className="empty-state">
+                      <RotateCw size={32} className="empty-icon spin-animation" />
+                      <h4>Memuat data dari PostgreSQL...</h4>
+                      <p>Mengambil data precosting langsung melalui API backend.</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : apiError && precostings.length === 0 ? (
+                <tr>
+                  <td colSpan="12" className="empty-state-cell">
+                    <div className="empty-state">
+                      <AlertTriangle size={36} className="empty-icon text-amber" />
+                      <h4>Koneksi API Server Terputus</h4>
+                      <p>{apiError}</p>
+                      <button
+                        type="button"
+                        className="btn-sync-refresh"
+                        style={{ marginTop: '12px', display: 'inline-flex' }}
+                        onClick={refreshFromBackend}
+                      >
+                        <RotateCw size={14} className="sync-icon" />
+                        <span>Coba Hubungkan Lagi</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ) : sortedItems.length === 0 ? (
+                <tr>
+                  <td colSpan="12" className="empty-state-cell">
                     <div className="empty-state">
                       <Layers size={36} className="empty-icon" />
-                      <h4>Tidak ada data precosting ditemukan</h4>
-                      <p>Coba sesuaikan kata kunci pencarian atau ganti filter status.</p>
+                      <h4>Tidak ada data precosting di database</h4>
+                      <p>Data tabel "PrecostingHeader" kosong atau filter pencarian tidak sesuai.</p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                sortedItems.map((item, index) => {
+                sortedItems.map((item) => {
                   const remarksCount = item.remarks ? item.remarks.length : 0;
+                  const ppnVal = item.ppnPerPcs || Math.round((item.hppPerPcs || 0) * 0.11);
+                  const consmVal = item.mainFabricConsumption || item.fabrics?.[0]?.consumption || 0;
+                  const consmUnit = item.mainFabricUnit === 'Meter' ? 'm' : (item.mainFabricUnit || 'm');
+                  const fabricPrice = item.mainFabricUnitPrice || item.fabrics?.[0]?.unitPrice || 0;
+
                   return (
                     <tr key={item.id} className="table-row-hover">
-                      <td className="td-center font-mono text-muted">{index + 1}</td>
+                      {/* 1. Nomor Precosting */}
                       <td className="td-precosting-no font-mono font-bold">
-                        <button 
+                        <button
+                          type="button"
                           className="link-precosting-no"
                           onClick={() => selectPrecosting(item.id)}
-                          title="Lihat Detail Item"
+                          title="Lihat Detail Precosting"
                         >
                           {item.precostingNo}
                         </button>
                       </td>
+
+                      {/* 2. Image */}
+                      <td className="td-center td-image-cell">
+                        <img
+                          src={item.image || '/images/shirt.jpg'}
+                          alt={item.itemName}
+                          className="grid-thumb-img"
+                          onClick={() => selectPrecosting(item.id)}
+                          title="Klik untuk lihat detail style"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = '/images/shirt.jpg';
+                          }}
+                        />
+                      </td>
+
+                      {/* 3. Qty Produksi */}
+                      <td className="td-center font-mono">
+                        <span className="qty-pill">
+                          {formatNumber(item.targetQty)} Pcs
+                        </span>
+                      </td>
+
+                      {/* 4. Nama Style */}
                       <td className="td-item-name">
-                        <div className="grid-item-cell">
-                          <img 
-                            src={item.image || '/images/shirt.jpg'} 
-                            alt={item.itemName} 
-                            className="grid-item-thumb"
-                            onError={(e) => {
-                              e.target.onerror = null;
-                              e.target.src = '/images/shirt.jpg';
-                            }}
-                          />
-                          <div>
-                            <div className="item-title font-semibold">{item.itemName}</div>
-                            <div className="item-meta-sub">
-                              <span className="item-category-tag">{item.category}</span>
-                              {item.buyer && <span className="item-buyer-name">• {item.buyer}</span>}
-                            </div>
+                        <div className="style-name-block">
+                          <button
+                            type="button"
+                            className="item-title font-semibold text-left-btn"
+                            onClick={() => selectPrecosting(item.id)}
+                          >
+                            {item.itemName}
+                          </button>
+                          <div className="item-meta-sub">
+                            <span className="item-category-tag">{item.category}</span>
+                            {item.buyer && <span className="item-buyer-name">• {item.buyer}</span>}
+                            <span className="style-status-inline">{getStatusBadge(item.status)}</span>
                           </div>
                         </div>
                       </td>
-                      <td className="td-right font-mono font-medium text-fabric">
+
+                      {/* 5. Consm */}
+                      <td className="td-center font-mono">
+                        <div className="consm-display">
+                          <span className="consm-val font-bold">{consmVal}</span>
+                          <span className="consm-unit text-muted"> {consmUnit}</span>
+                          {item.fabrics && item.fabrics.length > 1 && (
+                            <div className="consm-extra-badge">
+                              +{item.fabrics.length - 1} kain
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* 6. Harga Fabric */}
+                      <td className="td-right font-mono font-medium">
+                        {formatRupiah(fabricPrice)}
+                      </td>
+
+                      {/* 7. Total Kain (harga fabric * consm) */}
+                      <td className="td-right font-mono font-semibold text-fabric">
                         {formatRupiah(item.fabricCostPerPcs)}
                       </td>
-                      <td className="td-right font-mono font-medium text-acc">
-                        {formatRupiah(item.accCostPerPcs)}
-                      </td>
-                      <td className="td-right font-mono font-medium text-jasa">
+
+                      {/* 8. Harga CMT (total jasa) */}
+                      <td className="td-right font-mono font-semibold text-jasa">
                         {formatRupiah(item.jasaCostPerPcs)}
                       </td>
-                      <td className="td-center font-mono font-semibold">
-                        <span className="qty-pill">
-                          {formatNumber(item.targetQty)}
-                        </span>
+
+                      {/* 9. Harga Accesories */}
+                      <td className="td-right font-mono font-semibold text-acc">
+                        {formatRupiah(item.accCostPerPcs)}
                       </td>
-                      <td className="td-right font-mono font-semibold text-hpp">
+
+                      {/* 10. HPP */}
+                      <td className="td-right font-mono font-bold text-hpp">
                         {formatRupiah(item.hppPerPcs)}
                       </td>
-                      <td className="td-right font-mono font-bold text-total-qty">
-                        {formatRupiah(item.hppAllQty)}
+
+                      {/* 11. PPN */}
+                      <td className="td-right font-mono font-semibold text-ppn">
+                        {formatRupiah(ppnVal)}
                       </td>
-                      <td className="td-center">
-                        {getStatusBadge(item.status)}
-                      </td>
+
+                      {/* 12. Action (Detail & Approve / Not Approve) */}
                       <td className="td-center td-actions-cell">
                         <div className="grid-action-buttons">
                           {/* Detail Button */}
@@ -301,35 +442,32 @@ export const PrecostingGrid = () => {
                             type="button"
                             className="btn-action btn-view-detail"
                             onClick={() => selectPrecosting(item.id)}
-                            title="Buka View Detail Precosting"
+                            title="Buka View Detail Lengkap"
                           >
-                            <Eye size={14} />
+                            <Eye size={13} />
                             <span>Detail</span>
-                          </button>
-
-                          {/* Remarks Button */}
-                          <button
-                            type="button"
-                            className="btn-action btn-remarks"
-                            onClick={() => setRemarksModalItem(item)}
-                            title="Beri Catatan / Remarks"
-                          >
-                            <MessageSquare size={14} />
-                            <span>Remarks</span>
-                            {remarksCount > 0 && (
-                              <span className="remarks-count-pill">{remarksCount}</span>
-                            )}
                           </button>
 
                           {/* Approve Button */}
                           <button
                             type="button"
-                            className={`btn-action btn-approve ${item.status === 'Approved' ? 'is-approved' : ''}`}
-                            onClick={() => setApprovalModalItem(item)}
-                            title="Konfirmasi & Summary Approval"
+                            className={`btn-action btn-approve ${item.status === 'Approved' ? 'is-active-approved' : ''}`}
+                            onClick={() => handleApprove(item)}
+                            title={item.status === 'Approved' ? 'Sudah Disetujui (Klik untuk ringkasan otorisasi)' : 'Setujui Precosting Ini'}
                           >
-                            <CheckCircle size={14} />
+                            <CheckCircle2 size={13} />
                             <span>{item.status === 'Approved' ? 'Disetujui' : 'Approve'}</span>
+                          </button>
+
+                          {/* Not Approve Button */}
+                          <button
+                            type="button"
+                            className={`btn-action btn-not-approve ${item.status === 'Revision' ? 'is-active-rejected' : ''}`}
+                            onClick={() => handleReject(item)}
+                            title={item.status === 'Revision' ? 'Sudah berstatus Revisi / Not Approved' : 'Not Approve / Minta Revisi'}
+                          >
+                            <XCircle size={13} />
+                            <span>{item.status === 'Revision' ? 'Revisi' : 'Not Approve'}</span>
                           </button>
                         </div>
                       </td>
@@ -344,23 +482,49 @@ export const PrecostingGrid = () => {
 
       {/* Mobile Card View (Optimized for Smartphones / HP) */}
       <div className={`card-view-wrapper ${viewMode === 'table' ? 'hidden-on-desktop' : ''}`}>
-        {sortedItems.length === 0 ? (
+        {isLoading ? (
+          <div className="empty-state mobile-empty">
+            <RotateCw size={32} className="empty-icon spin-animation" />
+            <h4>Memuat data dari PostgreSQL...</h4>
+            <p>Mengambil data precosting dari API.</p>
+          </div>
+        ) : apiError && precostings.length === 0 ? (
+          <div className="empty-state mobile-empty">
+            <AlertTriangle size={36} className="empty-icon text-amber" />
+            <h4>Koneksi API Gagal</h4>
+            <p>{apiError}</p>
+            <button
+              type="button"
+              className="btn-sync-refresh"
+              style={{ marginTop: '12px', display: 'inline-flex' }}
+              onClick={refreshFromBackend}
+            >
+              <RotateCw size={14} className="sync-icon" />
+              <span>Coba Hubungkan Lagi</span>
+            </button>
+          </div>
+        ) : sortedItems.length === 0 ? (
           <div className="empty-state mobile-empty">
             <Layers size={36} className="empty-icon" />
-            <h4>Tidak ada data precosting</h4>
-            <p>Ubah pencarian atau filter status Anda.</p>
+            <h4>Tidak ada data precosting di database</h4>
+            <p>Data tabel "PrecostingHeader" kosong atau filter pencarian tidak sesuai.</p>
           </div>
         ) : (
-          sortedItems.map((item, index) => {
-            const remarksCount = item.remarks ? item.remarks.length : 0;
+          sortedItems.map((item) => {
+            const ppnVal = item.ppnPerPcs || Math.round((item.hppPerPcs || 0) * 0.11);
+            const consmVal = item.mainFabricConsumption || item.fabrics?.[0]?.consumption || 0;
+            const consmUnit = item.mainFabricUnit === 'Meter' ? 'm' : (item.mainFabricUnit || 'm');
+            const fabricPrice = item.mainFabricUnitPrice || item.fabrics?.[0]?.unitPrice || 0;
+
             return (
               <div key={item.id} className="mobile-precost-card">
-                {/* Card Header */}
+                {/* Card Top Row: Image + Header info */}
                 <div className="card-top-row">
-                  <img 
-                    src={item.image || '/images/shirt.jpg'} 
-                    alt={item.itemName} 
+                  <img
+                    src={item.image || '/images/shirt.jpg'}
+                    alt={item.itemName}
                     className="card-thumb-img"
+                    onClick={() => selectPrecosting(item.id)}
                     onError={(e) => {
                       e.target.onerror = null;
                       e.target.src = '/images/shirt.jpg';
@@ -368,17 +532,17 @@ export const PrecostingGrid = () => {
                   />
                   <div className="card-header-texts">
                     <div className="card-precost-line">
-                      <span className="card-no-badge">#{index + 1}</span>
                       <span className="card-precosting-no font-mono">{item.precostingNo}</span>
+                      <span className="card-qty-badge font-mono">{formatNumber(item.targetQty)} Pcs</span>
                     </div>
-                    <div 
-                      className="card-item-title" 
+                    <div
+                      className="card-item-title"
                       onClick={() => selectPrecosting(item.id)}
                     >
                       {item.itemName}
                     </div>
                     <div className="card-item-category">
-                      {item.category} • Buyer: {item.buyer || '-'}
+                      {item.category} {item.buyer && `• ${item.buyer}`}
                     </div>
                   </div>
                   <div className="card-status-wrapper">
@@ -386,33 +550,37 @@ export const PrecostingGrid = () => {
                   </div>
                 </div>
 
-                {/* Three Costs Breakdown (Fabric, Acc, Jasa) */}
-                <div className="card-costs-grid">
-                  <div className="card-cost-box fabric-box">
-                    <span className="box-label">Fabric / Pcs</span>
-                    <span className="box-val">{formatRupiah(item.fabricCostPerPcs)}</span>
-                  </div>
-                  <div className="card-cost-box acc-box">
-                    <span className="box-label">Acc / Pcs</span>
-                    <span className="box-val">{formatRupiah(item.accCostPerPcs)}</span>
-                  </div>
-                  <div className="card-cost-box jasa-box">
-                    <span className="box-label">Jasa / Pcs</span>
-                    <span className="box-val">{formatRupiah(item.jasaCostPerPcs)}</span>
-                  </div>
-                </div>
-
-                {/* Production Total Info */}
-                <div className="card-summary-strip">
-                  <div className="summary-strip-item">
-                    <span className="strip-label">Target Qty:</span>
-                    <span className="strip-value font-mono">{formatNumber(item.targetQty)} Pcs</span>
-                  </div>
-                  <div className="summary-strip-item text-right">
-                    <span className="strip-label">Biaya Semua Qty:</span>
-                    <span className="strip-value font-bold text-total-qty font-mono">
-                      {formatRupiah(item.hppAllQty)}
+                {/* Financial Metric Grid: Consm, Fabric, Total Kain, CMT, Acc, HPP, PPN */}
+                <div className="card-costs-grid-compact">
+                  <div className="card-cost-box">
+                    <span className="box-label">Consm</span>
+                    <span className="box-val font-mono">
+                      {consmVal} {consmUnit}
                     </span>
+                  </div>
+                  <div className="card-cost-box">
+                    <span className="box-label">Harga Fabric</span>
+                    <span className="box-val font-mono">{formatRupiah(fabricPrice)}</span>
+                  </div>
+                  <div className="card-cost-box highlight-cost-box">
+                    <span className="box-label">Total Kain</span>
+                    <span className="box-val font-mono text-fabric font-bold">{formatRupiah(item.fabricCostPerPcs)}</span>
+                  </div>
+                  <div className="card-cost-box">
+                    <span className="box-label">Harga CMT</span>
+                    <span className="box-val font-mono text-jasa font-semibold">{formatRupiah(item.jasaCostPerPcs)}</span>
+                  </div>
+                  <div className="card-cost-box">
+                    <span className="box-label">Harga Acc</span>
+                    <span className="box-val font-mono text-acc font-semibold">{formatRupiah(item.accCostPerPcs)}</span>
+                  </div>
+                  <div className="card-cost-box highlight-hpp-box">
+                    <span className="box-label">HPP / Pcs</span>
+                    <span className="box-val font-mono text-hpp font-bold">{formatRupiah(item.hppPerPcs)}</span>
+                  </div>
+                  <div className="card-cost-box">
+                    <span className="box-label">PPN (11%)</span>
+                    <span className="box-val font-mono text-ppn font-semibold">{formatRupiah(ppnVal)}</span>
                   </div>
                 </div>
 
@@ -423,26 +591,26 @@ export const PrecostingGrid = () => {
                     className="card-btn btn-view-detail"
                     onClick={() => selectPrecosting(item.id)}
                   >
-                    <Eye size={15} />
-                    <span>Lihat Detail</span>
+                    <Eye size={14} />
+                    <span>Detail</span>
                   </button>
 
                   <button
                     type="button"
-                    className="card-btn btn-remarks"
-                    onClick={() => setRemarksModalItem(item)}
+                    className={`card-btn btn-approve ${item.status === 'Approved' ? 'is-active-approved' : ''}`}
+                    onClick={() => handleApprove(item)}
                   >
-                    <MessageSquare size={15} />
-                    <span>Remarks {remarksCount > 0 ? `(${remarksCount})` : ''}</span>
+                    <CheckCircle2 size={14} />
+                    <span>{item.status === 'Approved' ? 'Disetujui' : 'Approve'}</span>
                   </button>
 
                   <button
                     type="button"
-                    className={`card-btn btn-approve ${item.status === 'Approved' ? 'is-approved' : ''}`}
-                    onClick={() => setApprovalModalItem(item)}
+                    className={`card-btn btn-not-approve ${item.status === 'Revision' ? 'is-active-rejected' : ''}`}
+                    onClick={() => handleReject(item)}
                   >
-                    <CheckCircle size={15} />
-                    <span>{item.status === 'Approved' ? 'Summary' : 'Approve'}</span>
+                    <XCircle size={14} />
+                    <span>{item.status === 'Revision' ? 'Revisi' : 'Not Approve'}</span>
                   </button>
                 </div>
               </div>
