@@ -333,10 +333,65 @@ export const PrecostingGrid = () => {
               ) : (
                 sortedItems.map((item) => {
                   const remarksCount = item.remarks ? item.remarks.length : 0;
-                  const ppnVal = item.ppnPerPcs || Math.round((item.hppPerPcs || 0) * 0.11);
-                  const consmVal = item.mainFabricConsumption || item.fabrics?.[0]?.consumption || 0;
+                  const targetQty = Number(item.targetQty || item.ProdQty || 1000);
+                  const consmVal = Number(item.consm ?? item.Consume ?? item.mainFabricConsumption ?? item.fabrics?.[0]?.consumption ?? 0);
                   const consmUnit = item.mainFabricUnit === 'Meter' ? 'm' : (item.mainFabricUnit || 'm');
-                  const fabricPrice = item.mainFabricUnitPrice || item.fabrics?.[0]?.unitPrice || 0;
+
+                  const fabricPrice = Number(
+                    item.fabricPrice ??
+                    item.FabricPrice ??
+                    item.hargaFabric ??
+                    item.mainFabricUnitPrice ??
+                    item.fabrics?.[0]?.unitPrice ??
+                    0
+                  );
+
+                  let totalFabricPerPcs = Number(
+                    item.fabricCostPerPcs ??
+                    item.totalKainPerPcs ??
+                    item.totalKain ??
+                    item.totalFabric ??
+                    item.TotalFabricPrice ??
+                    0
+                  );
+                  if (totalFabricPerPcs > 100000 && targetQty > 1 && (fabricPrice === 0 || totalFabricPerPcs > fabricPrice * 2)) {
+                    totalFabricPerPcs = Math.round(totalFabricPerPcs / targetQty);
+                  }
+                  if (totalFabricPerPcs === 0 && consmVal > 0 && fabricPrice > 0) {
+                    totalFabricPerPcs = Math.round(consmVal * fabricPrice);
+                  }
+
+                  let cmtPriceVal = Number(
+                    item.jasaCostPerPcs ??
+                    item.cmtCostPerPcs ??
+                    item.cmtPrice ??
+                    item.hargaCmt ??
+                    item.CMTPrice ??
+                    0
+                  );
+                  if (cmtPriceVal > 500000 && targetQty > 1) {
+                    cmtPriceVal = Math.round(cmtPriceVal / targetQty);
+                  }
+
+                  let accPriceVal = Number(
+                    item.accCostPerPcs ??
+                    item.accessoriesCostPerPcs ??
+                    item.accPrice ??
+                    item.hargaAccessories ??
+                    item.AccPrice ??
+                    0
+                  );
+                  if (accPriceVal > 50000 && targetQty > 1 && (item.hpp ? accPriceVal > Number(item.hpp) : true)) {
+                    accPriceVal = Math.round(accPriceVal / targetQty);
+                  }
+
+                  let hppVal = Number(item.hppPerPcs ?? item.hpp ?? item.HPP ?? 0);
+                  if (hppVal === 0) {
+                    const base = totalFabricPerPcs + cmtPriceVal + accPriceVal;
+                    hppVal = base > 0 ? Math.round(base * 1.025) : 0;
+                  }
+
+                  const ppnVal = Number(item.ppnPerPcs ?? item.taxPrice ?? item.TaxPrice ?? item.ppn ?? Math.round(hppVal * 0.11));
 
                   return (
                     <tr key={item.id} className="table-row-hover">
@@ -412,22 +467,22 @@ export const PrecostingGrid = () => {
 
                       {/* 7. Total Kain (harga fabric * consm) */}
                       <td className="td-right font-mono font-semibold text-fabric">
-                        {formatRupiah(item.fabricCostPerPcs)}
+                        {formatRupiah(totalFabricPerPcs)}
                       </td>
 
                       {/* 8. Harga CMT (total jasa) */}
                       <td className="td-right font-mono font-semibold text-jasa">
-                        {formatRupiah(item.jasaCostPerPcs)}
+                        {formatRupiah(cmtPriceVal)}
                       </td>
 
                       {/* 9. Harga Accesories */}
                       <td className="td-right font-mono font-semibold text-acc">
-                        {formatRupiah(item.accCostPerPcs)}
+                        {formatRupiah(accPriceVal)}
                       </td>
 
                       {/* 10. HPP */}
                       <td className="td-right font-mono font-bold text-hpp">
-                        {formatRupiah(item.hppPerPcs)}
+                        {formatRupiah(hppVal)}
                       </td>
 
                       {/* 11. PPN */}
@@ -512,10 +567,65 @@ export const PrecostingGrid = () => {
           </div>
         ) : (
           sortedItems.map((item) => {
-            const ppnVal = item.ppnPerPcs || Math.round((item.hppPerPcs || 0) * 0.11);
-            const consmVal = item.mainFabricConsumption || item.fabrics?.[0]?.consumption || 0;
+            const targetQty = Number(item.targetQty || item.ProdQty || 1000);
+            const consmVal = Number(item.consm ?? item.Consume ?? item.mainFabricConsumption ?? item.fabrics?.[0]?.consumption ?? 0);
             const consmUnit = item.mainFabricUnit === 'Meter' ? 'm' : (item.mainFabricUnit || 'm');
-            const fabricPrice = item.mainFabricUnitPrice || item.fabrics?.[0]?.unitPrice || 0;
+
+            const fabricPrice = Number(
+              item.fabricPrice ??
+              item.FabricPrice ??
+              item.hargaFabric ??
+              item.mainFabricUnitPrice ??
+              item.fabrics?.[0]?.unitPrice ??
+              0
+            );
+
+            let totalFabricPerPcs = Number(
+              item.fabricCostPerPcs ??
+              item.totalKainPerPcs ??
+              item.totalKain ??
+              item.totalFabric ??
+              item.TotalFabricPrice ??
+              0
+            );
+            if (totalFabricPerPcs > 100000 && targetQty > 1 && (fabricPrice === 0 || totalFabricPerPcs > fabricPrice * 2)) {
+              totalFabricPerPcs = Math.round(totalFabricPerPcs / targetQty);
+            }
+            if (totalFabricPerPcs === 0 && consmVal > 0 && fabricPrice > 0) {
+              totalFabricPerPcs = Math.round(consmVal * fabricPrice);
+            }
+
+            let cmtPriceVal = Number(
+              item.jasaCostPerPcs ??
+              item.cmtCostPerPcs ??
+              item.cmtPrice ??
+              item.hargaCmt ??
+              item.CMTPrice ??
+              0
+            );
+            if (cmtPriceVal > 500000 && targetQty > 1) {
+              cmtPriceVal = Math.round(cmtPriceVal / targetQty);
+            }
+
+            let accPriceVal = Number(
+              item.accCostPerPcs ??
+              item.accessoriesCostPerPcs ??
+              item.accPrice ??
+              item.hargaAccessories ??
+              item.AccPrice ??
+              0
+            );
+            if (accPriceVal > 50000 && targetQty > 1 && (item.hpp ? accPriceVal > Number(item.hpp) : true)) {
+              accPriceVal = Math.round(accPriceVal / targetQty);
+            }
+
+            let hppVal = Number(item.hppPerPcs ?? item.hpp ?? item.HPP ?? 0);
+            if (hppVal === 0) {
+              const base = totalFabricPerPcs + cmtPriceVal + accPriceVal;
+              hppVal = base > 0 ? Math.round(base * 1.025) : 0;
+            }
+
+            const ppnVal = Number(item.ppnPerPcs ?? item.taxPrice ?? item.TaxPrice ?? item.ppn ?? Math.round(hppVal * 0.11));
 
             return (
               <div key={item.id} className="mobile-precost-card">
@@ -565,19 +675,19 @@ export const PrecostingGrid = () => {
                   </div>
                   <div className="card-cost-box highlight-cost-box">
                     <span className="box-label">Total Kain</span>
-                    <span className="box-val font-mono text-fabric font-bold">{formatRupiah(item.fabricCostPerPcs)}</span>
+                    <span className="box-val font-mono text-fabric font-bold">{formatRupiah(totalFabricPerPcs)}</span>
                   </div>
                   <div className="card-cost-box">
                     <span className="box-label">Harga CMT</span>
-                    <span className="box-val font-mono text-jasa font-semibold">{formatRupiah(item.jasaCostPerPcs)}</span>
+                    <span className="box-val font-mono text-jasa font-semibold">{formatRupiah(cmtPriceVal)}</span>
                   </div>
                   <div className="card-cost-box">
                     <span className="box-label">Harga Acc</span>
-                    <span className="box-val font-mono text-acc font-semibold">{formatRupiah(item.accCostPerPcs)}</span>
+                    <span className="box-val font-mono text-acc font-semibold">{formatRupiah(accPriceVal)}</span>
                   </div>
                   <div className="card-cost-box highlight-hpp-box">
                     <span className="box-label">HPP / Pcs</span>
-                    <span className="box-val font-mono text-hpp font-bold">{formatRupiah(item.hppPerPcs)}</span>
+                    <span className="box-val font-mono text-hpp font-bold">{formatRupiah(hppVal)}</span>
                   </div>
                   <div className="card-cost-box">
                     <span className="box-label">PPN (11%)</span>

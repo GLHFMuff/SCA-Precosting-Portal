@@ -53,10 +53,21 @@ export const PrecostingDetail = () => {
   };
 
   // Percentage calculations for cost breakdown
-  const totalCost = item.hppPerPcs || 1;
-  const fabricPercent = Math.round((item.fabricCostPerPcs / totalCost) * 100);
-  const accPercent = Math.round((item.accCostPerPcs / totalCost) * 100);
-  const jasaPercent = Math.round((item.jasaCostPerPcs / totalCost) * 100);
+  const targetQty = Number(item.targetQty || item.ProdQty || 1000);
+  const fabricCostVal = Number(item.fabricCostPerPcs ?? item.totalKainPerPcs ?? item.totalKain ?? item.totalFabric ?? 0);
+  const normalizedFabricCost = fabricCostVal > 100000 && targetQty > 1 ? Math.round(fabricCostVal / targetQty) : fabricCostVal;
+
+  const accCostVal = Number(item.accCostPerPcs ?? item.accessoriesCostPerPcs ?? item.accPrice ?? 0);
+  const normalizedAccCost = accCostVal > 50000 && targetQty > 1 && (item.hpp ? accCostVal > Number(item.hpp) : true) ? Math.round(accCostVal / targetQty) : accCostVal;
+
+  const jasaCostVal = Number(item.jasaCostPerPcs ?? item.cmtCostPerPcs ?? item.cmtPrice ?? 0);
+  const normalizedJasaCost = jasaCostVal > 500000 && targetQty > 1 ? Math.round(jasaCostVal / targetQty) : jasaCostVal;
+
+  const hppVal = Number(item.hppPerPcs ?? item.hpp ?? item.HPP ?? (normalizedFabricCost + normalizedAccCost + normalizedJasaCost));
+  const totalCost = hppVal > 0 ? hppVal : 1;
+  const fabricPercent = Math.round((normalizedFabricCost / totalCost) * 100);
+  const accPercent = Math.round((normalizedAccCost / totalCost) * 100);
+  const jasaPercent = Math.round((normalizedJasaCost / totalCost) * 100);
   const bufferPercent = Math.max(0, 100 - (fabricPercent + accPercent + jasaPercent));
 
   return (
@@ -229,9 +240,9 @@ export const PrecostingDetail = () => {
             <span>Biaya Fabric (Kain)</span>
             <span className="kpi-tag">Bahan Baku</span>
           </div>
-          <div className="kpi-main-val font-mono">{formatRupiah(item.fabricCostPerPcs)}</div>
+          <div className="kpi-main-val font-mono">{formatRupiah(normalizedFabricCost)}</div>
           <div className="kpi-sub-val font-mono">
-            Semua Qty: <strong>{formatRupiah(item.totalFabricCostAllQty)}</strong>
+            Semua Qty: <strong>{formatRupiah(normalizedFabricCost * targetQty)}</strong>
           </div>
         </div>
 
@@ -241,9 +252,9 @@ export const PrecostingDetail = () => {
             <span>Biaya Accessories</span>
             <span className="kpi-tag">Trims & Packaging</span>
           </div>
-          <div className="kpi-main-val font-mono">{formatRupiah(item.accCostPerPcs)}</div>
+          <div className="kpi-main-val font-mono">{formatRupiah(normalizedAccCost)}</div>
           <div className="kpi-sub-val font-mono">
-            Semua Qty: <strong>{formatRupiah(item.totalAccCostAllQty)}</strong>
+            Semua Qty: <strong>{formatRupiah(normalizedAccCost * targetQty)}</strong>
           </div>
         </div>
 
@@ -253,9 +264,9 @@ export const PrecostingDetail = () => {
             <span>Biaya Jasa & CMT</span>
             <span className="kpi-tag">Upah & Jahit</span>
           </div>
-          <div className="kpi-main-val font-mono">{formatRupiah(item.jasaCostPerPcs)}</div>
+          <div className="kpi-main-val font-mono">{formatRupiah(normalizedJasaCost)}</div>
           <div className="kpi-sub-val font-mono">
-            Semua Qty: <strong>{formatRupiah(item.totalJasaCostAllQty)}</strong>
+            Semua Qty: <strong>{formatRupiah(normalizedJasaCost * targetQty)}</strong>
           </div>
         </div>
 
@@ -265,9 +276,9 @@ export const PrecostingDetail = () => {
             <span>COGM (Biaya Pokok Prod.)</span>
             <span className="kpi-tag bold-tag">Direct + Overhead</span>
           </div>
-          <div className="kpi-main-val font-mono text-purple">{formatRupiah(item.cogmPerPcs)}</div>
+          <div className="kpi-main-val font-mono text-purple">{formatRupiah(normalizedFabricCost + normalizedAccCost + normalizedJasaCost)}</div>
           <div className="kpi-sub-val font-mono">
-            Semua Qty: <strong>{formatRupiah(item.cogmAllQty)}</strong>
+            Semua Qty: <strong>{formatRupiah((normalizedFabricCost + normalizedAccCost + normalizedJasaCost) * targetQty)}</strong>
           </div>
         </div>
 
@@ -277,9 +288,9 @@ export const PrecostingDetail = () => {
             <span>HPP / COGS per Pcs</span>
             <span className="kpi-tag primary-tag">Final Precosting</span>
           </div>
-          <div className="kpi-main-val font-mono text-emerald font-bold">{formatRupiah(item.hppPerPcs)}</div>
+          <div className="kpi-main-val font-mono text-emerald font-bold">{formatRupiah(hppVal)}</div>
           <div className="kpi-sub-val font-mono">
-            Total Semua Qty: <strong className="text-emerald">{formatRupiah(item.hppAllQty)}</strong>
+            Total Semua Qty: <strong className="text-emerald">{formatRupiah(hppVal * targetQty)}</strong>
           </div>
         </div>
       </div>
