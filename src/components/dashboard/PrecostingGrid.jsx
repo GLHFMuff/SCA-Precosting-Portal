@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { usePrecosting } from '../../context/PrecostingContext';
 import { formatRupiah, formatNumber } from '../../utils/formatters';
+import { decodeBase64Image } from '../../utils/imageUtils';
 import {
   Search,
   Filter,
@@ -354,7 +355,7 @@ export const PrecostingGrid = () => {
                       {/* 2. Image */}
                       <td className="td-center td-image-cell">
                         <img
-                          src={item.image || '/images/shirt.jpg'}
+                          src={decodeBase64Image(item.image)}
                           alt={item.itemName}
                           className="grid-thumb-img"
                           onClick={() => selectPrecosting(item.id)}
@@ -521,7 +522,7 @@ export const PrecostingGrid = () => {
                 {/* Card Top Row: Image + Header info */}
                 <div className="card-top-row">
                   <img
-                    src={item.image || '/images/shirt.jpg'}
+                    src={decodeBase64Image(item.image)}
                     alt={item.itemName}
                     className="card-thumb-img"
                     onClick={() => selectPrecosting(item.id)}

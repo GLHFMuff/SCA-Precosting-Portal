@@ -7,7 +7,8 @@ import {
   ShieldCheck,
   Menu,
   X,
-  Database
+  Database,
+  PlusCircle
 } from 'lucide-react';
 
 export const Header = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
@@ -17,7 +18,8 @@ export const Header = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
     selectedPrecosting,
     clearSelectedPrecosting,
     isBackendOnline,
-    dbInfo
+    dbInfo,
+    setIsNewModalOpen
   } = usePrecosting();
 
   return (
@@ -50,6 +52,16 @@ export const Header = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
 
         {/* Right Action Tools & User Profile */}
         <div className="header-actions">
+          <button 
+            type="button"
+            className="btn-header-secondary" 
+            onClick={() => setIsNewModalOpen(true)}
+            title="Buat Precosting Baru"
+          >
+            <PlusCircle size={15} />
+            <span className="btn-text">Tambah Precosting</span>
+          </button>
+
           {/* User profile dropdown / info */}
           {user && (
             <div className="user-profile-badge">

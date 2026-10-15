@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { usePrecosting } from '../../context/PrecostingContext';
 import { formatRupiah, formatNumber, formatDate } from '../../utils/formatters';
+import { decodeBase64Image } from '../../utils/imageUtils';
 import { 
   ArrowLeft, 
   CheckCircle, 
@@ -104,7 +105,7 @@ export const PrecostingDetail = () => {
               title="Klik untuk memperbesar gambar"
             >
               <img 
-                src={item.image || '/images/shirt.jpg'} 
+                src={decodeBase64Image(item.image)} 
                 alt={item.itemName} 
                 className="detail-garment-img"
                 onError={(e) => {
@@ -211,7 +212,7 @@ export const PrecostingDetail = () => {
             </div>
             <div className="zoom-modal-body">
               <img 
-                src={item.image || '/images/shirt.jpg'} 
+                src={decodeBase64Image(item.image)} 
                 alt={item.itemName} 
                 className="full-zoom-img"
               />

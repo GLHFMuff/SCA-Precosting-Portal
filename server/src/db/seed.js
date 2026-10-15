@@ -1,6 +1,7 @@
 import { query, testConnection } from './connection.js';
 import { defaultUsers, defaultPrecostings } from './seedData.js';
 import { calculatePrecostingTotals } from '../utils/calculations.js';
+import { ensureBase64Image } from '../utils/imageHelper.js';
 import { fileURLToPath } from 'url';
 
 export const seedDatabase = async () => {
@@ -45,7 +46,7 @@ export const seedDatabase = async () => {
         [
           p.id,
           p.precostingNo,
-          p.image,
+          ensureBase64Image(p.image),
           p.targetQty,
           p.itemName,
           p.mainFabricConsumption || 0,

@@ -12,8 +12,8 @@ export const garmentImageMap = {
 export const calculatePrecostingTotals = (item) => {
   if (!item) return item;
 
-  // Image resolution
-  const image = item.image || garmentImageMap[item.precostingNo] || item.ProductImage || '/images/shirt.jpg';
+  // Image resolution (Base64 from database or fallback)
+  const image = item.image || item.ProductImage || garmentImageMap[item.precostingNo] || '';
 
   const fabrics = Array.isArray(item.fabrics) ? item.fabrics : [];
   const accessories = Array.isArray(item.accessories) ? item.accessories : [];

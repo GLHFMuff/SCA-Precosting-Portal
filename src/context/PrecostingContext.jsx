@@ -79,6 +79,7 @@ export const PrecostingProvider = ({ children }) => {
   // Modals state
   const [approvalModalItem, setApprovalModalItem] = useState(null);
   const [remarksModalItem, setRemarksModalItem] = useState(null);
+  const [isNewModalOpen, setIsNewModalOpen] = useState(false);
 
   // Notification toast
   const [toast, setToast] = useState(null);
@@ -212,6 +213,20 @@ export const PrecostingProvider = ({ children }) => {
     }
   };
 
+  // Create / Upsert Precosting
+  const addNewPrecosting = async (newItemData) => {
+    try {
+      const res = await precostingApi.create(newItemData);
+      showToast(`Precosting ${newItemData.precostingNo || 'baru'} berhasil disimpan ke database!`, 'success');
+      await refreshFromBackend();
+      return res;
+    } catch (err) {
+      console.error('Failed to create precosting:', err);
+      showToast('Gagal menyimpan precosting: ' + err.message, 'error');
+      return null;
+    }
+  };
+
   return (
     <PrecostingContext.Provider
       value={{
@@ -237,11 +252,14 @@ export const PrecostingProvider = ({ children }) => {
         addRemark,
         approvePrecosting,
         rejectPrecosting,
+        addNewPrecosting,
         // Modal state
         approvalModalItem,
         setApprovalModalItem,
         remarksModalItem,
         setRemarksModalItem,
+        isNewModalOpen,
+        setIsNewModalOpen,
         toast,
         showToast,
       }}

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { usePrecosting } from '../../context/PrecostingContext';
 import { formatRupiah } from '../../utils/formatters';
-import { X, Plus, Trash2, Scissors, Package, Layers, CheckCircle2 } from 'lucide-react';
+import { fileToBase64 } from '../../utils/imageUtils';
+import { X, Plus, Trash2, Scissors, Package, Layers, CheckCircle2, Upload, ImageIcon } from 'lucide-react';
 
 export const NewPrecostingModal = () => {
   const { isNewModalOpen, setIsNewModalOpen, addNewPrecosting } = usePrecosting();
@@ -13,6 +14,7 @@ export const NewPrecostingModal = () => {
   const [season, setSeason] = useState('Spring / Summer 2026');
   const [targetQty, setTargetQty] = useState(2000);
   const [deliveryDate, setDeliveryDate] = useState('2026-06-30');
+  const [image, setImage] = useState('');
 
   // Fabric list
   const [fabrics, setFabrics] = useState([
@@ -99,6 +101,7 @@ export const NewPrecostingModal = () => {
       targetQty: Number(targetQty) || 1000,
       unit: 'Pcs',
       deliveryDate,
+      image: image || '',
       fabrics,
       accessories,
       services,
@@ -200,6 +203,85 @@ export const NewPrecostingModal = () => {
                   value={deliveryDate}
                   onChange={(e) => setDeliveryDate(e.target.value)}
                 />
+              </div>
+
+              {/* Base64 Image Upload */}
+              <div className="form-group full-width" style={{ gridColumn: 'span 2', marginTop: '0.25rem' }}>
+                <label className="form-label">Foto / Sketsa Model (Disimpan Otomatis Sebagai Base64)</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    id="new-modal-file-input"
+                    style={{ display: 'none' }}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 3 * 1024 * 1024) {
+                          alert('Ukuran gambar maksimal 3MB');
+                          return;
+                        }
+                        const b64 = await fileToBase64(file);
+                        setImage(b64);
+                      }
+                    }}
+                  />
+                  <label
+                    htmlFor="new-modal-file-input"
+                    style={{
+                      cursor: 'pointer',
+                      padding: '0.45rem 0.85rem',
+                      background: '#f8fafc',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '6px',
+                      fontSize: '0.825rem',
+                      fontWeight: 600,
+                      color: '#334155',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                    }}
+                  >
+                    <Upload size={14} />
+                    <span>{image ? 'Ganti Foto' : 'Upload Foto Pakaian'}</span>
+                  </label>
+                  {image ? (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <img
+                        src={image}
+                        alt="Preview"
+                        style={{
+                          width: '38px',
+                          height: '38px',
+                          objectFit: 'cover',
+                          borderRadius: '6px',
+                          border: '1px solid #cbd5e1',
+                        }}
+                      />
+                      <span style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 600 }}>
+                        ✓ Base64 Siap
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setImage('')}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#ef4444',
+                          cursor: 'pointer',
+                          fontSize: '0.75rem',
+                          textDecoration: 'underline',
+                        }}
+                      >
+                        Hapus
+                      </button>
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                      Format: JPG, PNG, WebP (akan langsung di-encode ke Base64)
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 

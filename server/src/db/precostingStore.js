@@ -1,6 +1,7 @@
 import { query, getDbStatus } from './connection.js';
 import { defaultPrecostings, defaultUsers } from './seedData.js';
 import { calculatePrecostingTotals } from '../utils/calculations.js';
+import { ensureBase64Image } from '../utils/imageHelper.js';
 
 // In-Memory Fallback State (no dummy data)
 let memoryPrecostings = [];
@@ -36,9 +37,13 @@ function mapDbRowToPrecosting(row) {
     targetQty,
     itemName: row.ProdName || 'Style Garment',
     consm,
+    fabricPrice,
     hargaFabric: fabricPrice,
+    totalFabric,
     totalKain: totalFabric,
+    cmtPrice,
     hargaCmt: cmtPrice,
+    accPrice,
     hargaAccessories: accPrice,
     hpp,
     ppn: taxPrice,
@@ -98,189 +103,206 @@ function mapDbRowToPrecosting(row) {
 
 // Normalizer to accept PascalCase (database column format e.g. PrecostingNo, ProdName),
 // camelCase (precostingNo, itemName), and snake_case (precosting_no, prod_name)
+// IMPORTANT: Only return fields that were actually provided in payload so partial updates
+// never overwrite or zero-out existing database values!
 export function normalizePrecostingInput(payload = {}) {
   if (!payload || typeof payload !== 'object') return {};
 
+  const result = {};
+
+  // Precosting No
   const precostingNo =
-    payload.PrecostingNo ||
-    payload.precostingNo ||
-    payload.precosting_no ||
-    payload.id ||
-    '';
+    payload.PrecostingNo ??
+    payload.precostingNo ??
+    payload.precosting_no ??
+    null;
+  if (precostingNo !== null && precostingNo !== undefined) {
+    result.precostingNo = String(precostingNo).trim();
+  } else if (payload.id && typeof payload.id === 'string' && (payload.id.includes('-') || payload.id.includes('/'))) {
+    result.precostingNo = payload.id.trim();
+  }
 
-  const itemName =
-    payload.ProdName ||
-    payload.prodName ||
-    payload.prod_name ||
-    payload.itemName ||
-    payload.item_name ||
-    payload.ItemName ||
-    'Style Garment';
+  // ProdName / ItemName
+  const prodName =
+    payload.ProdName ??
+    payload.prodName ??
+    payload.prod_name ??
+    payload.itemName ??
+    payload.item_name ??
+    payload.ItemName ??
+    null;
+  if (prodName !== null && prodName !== undefined && String(prodName).trim() !== '') {
+    result.itemName = String(prodName).trim();
+  }
 
-  const image =
-    payload.ProductImage ||
-    payload.productImage ||
-    payload.product_image ||
-    payload.image ||
-    '';
+  // ProductImage
+  const rawImage =
+    payload.ProductImage ??
+    payload.productImage ??
+    payload.product_image ??
+    payload.image ??
+    null;
+  if (rawImage !== null && rawImage !== undefined) {
+    result.image = ensureBase64Image(rawImage);
+  }
 
-  const targetQty = Number(
+  // ProdQty / TargetQty
+  const qty =
     payload.ProdQty ??
     payload.prodQty ??
     payload.prod_qty ??
     payload.targetQty ??
     payload.target_qty ??
     payload.qty ??
-    1000
-  );
+    null;
+  if (qty !== null && qty !== undefined && !isNaN(Number(qty))) {
+    result.targetQty = Number(qty);
+  }
 
-  const consm = Number(
+  // Consume / consm
+  const consm =
     payload.Consume ??
     payload.consume ??
     payload.consm ??
     payload.mainFabricConsumption ??
-    0
-  );
+    null;
+  if (consm !== null && consm !== undefined && !isNaN(Number(consm))) {
+    result.consm = Number(consm);
+  }
 
-  const fabricPrice = Number(
+  // FabricPrice
+  const fabricPrice =
     payload.FabricPrice ??
     payload.fabricPrice ??
     payload.fabric_price ??
     payload.hargaFabric ??
     payload.harga_fabric ??
     payload.mainFabricUnitPrice ??
-    0
-  );
+    null;
+  if (fabricPrice !== null && fabricPrice !== undefined && !isNaN(Number(fabricPrice))) {
+    result.fabricPrice = Number(fabricPrice);
+  }
 
-  const totalFabric = Number(
+  // TotalFabricPrice
+  const totalFabric =
     payload.TotalFabricPrice ??
     payload.totalFabricPrice ??
     payload.total_fabric_price ??
     payload.totalKain ??
     payload.total_kain ??
-    (consm * fabricPrice)
-  );
+    null;
+  if (totalFabric !== null && totalFabric !== undefined && !isNaN(Number(totalFabric))) {
+    result.totalFabric = Number(totalFabric);
+  }
 
-  const cmtPrice = Number(
+  // CMTPrice
+  const cmtPrice =
     payload.CMTPrice ??
     payload.cmtPrice ??
     payload.cmt_price ??
     payload.hargaCmt ??
     payload.harga_cmt ??
     payload.jasaCostPerPcs ??
-    0
-  );
+    null;
+  if (cmtPrice !== null && cmtPrice !== undefined && !isNaN(Number(cmtPrice))) {
+    result.cmtPrice = Number(cmtPrice);
+  }
 
-  const accPrice = Number(
+  // AccPrice
+  const accPrice =
     payload.AccPrice ??
     payload.accPrice ??
     payload.acc_price ??
     payload.hargaAccessories ??
     payload.harga_accessories ??
     payload.accCostPerPcs ??
-    0
-  );
+    null;
+  if (accPrice !== null && accPrice !== undefined && !isNaN(Number(accPrice))) {
+    result.accPrice = Number(accPrice);
+  }
 
-  const baseCost = totalFabric + cmtPrice + accPrice;
-  const hpp = payload.HPP !== undefined
-    ? Number(payload.HPP)
-    : payload.hpp !== undefined
-    ? Number(payload.hpp)
-    : (baseCost > 0 ? Math.round(baseCost * 1.025) : 0);
+  // HPP
+  const hpp =
+    payload.HPP ??
+    payload.hpp ??
+    payload.hppPerPcs ??
+    null;
+  if (hpp !== null && hpp !== undefined && !isNaN(Number(hpp))) {
+    result.hpp = Number(hpp);
+  }
 
-  const taxPrice = payload.TaxPrice !== undefined
-    ? Number(payload.TaxPrice)
-    : payload.taxPrice !== undefined
-    ? Number(payload.taxPrice)
-    : payload.ppn !== undefined
-    ? Number(payload.ppn)
-    : Math.round(hpp * 0.11);
+  // TaxPrice / PPN
+  const taxPrice =
+    payload.TaxPrice ??
+    payload.taxPrice ??
+    payload.ppn ??
+    payload.ppnPerPcs ??
+    null;
+  if (taxPrice !== null && taxPrice !== undefined && !isNaN(Number(taxPrice))) {
+    result.taxPrice = Number(taxPrice);
+  }
 
-  const status =
-    payload.Status ||
-    payload.status ||
-    'Pending Approval';
+  // Status
+  const status = payload.Status ?? payload.status ?? null;
+  if (status !== null && status !== undefined && String(status).trim() !== '') {
+    result.status = String(status).trim();
+  }
 
-  const buyer = payload.Buyer || payload.buyer || 'Global Buyer';
-  const category = payload.Category || payload.category || 'Garment';
-  const deliveryDate = payload.DeliveryDate || payload.deliveryDate || payload.delivery_date || '';
+  // Buyer
+  const buyer = payload.Buyer ?? payload.buyer ?? null;
+  if (buyer !== null && buyer !== undefined && String(buyer).trim() !== '') {
+    result.buyer = String(buyer).trim();
+  }
 
-  const approvedBy = payload.ApprovedBy || payload.approvedBy || null;
-  const approvalDate = payload.ApprovalDate || payload.approvalDate || null;
-  const approvalNotes = payload.ApprovalNotes || payload.approvalNotes || '';
+  // Category
+  const category = payload.Category ?? payload.category ?? null;
+  if (category !== null && category !== undefined && String(category).trim() !== '') {
+    result.category = String(category).trim();
+  }
 
-  const parseJson = (val, fallback = null) => {
-    if (!val) return fallback;
-    if (typeof val === 'object') return val;
+  // DeliveryDate
+  const deliveryDate = payload.DeliveryDate ?? payload.deliveryDate ?? payload.delivery_date ?? null;
+  if (deliveryDate !== null && deliveryDate !== undefined) {
+    result.deliveryDate = String(deliveryDate).trim();
+  }
+
+  // Approval fields
+  if (payload.ApprovedBy !== undefined || payload.approvedBy !== undefined) {
+    result.approvedBy = payload.ApprovedBy ?? payload.approvedBy;
+  }
+  if (payload.ApprovalDate !== undefined || payload.approvalDate !== undefined) {
+    result.approvalDate = payload.ApprovalDate ?? payload.approvalDate;
+  }
+  if (payload.ApprovalNotes !== undefined || payload.approvalNotes !== undefined) {
+    result.approvalNotes = payload.ApprovalNotes ?? payload.approvalNotes;
+  }
+
+  // Arrays (Fabrics, Accessories, Services, Remarks)
+  const parseJson = (val) => {
+    if (val === null || val === undefined) return undefined;
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'object') return [val];
     try {
-      return JSON.parse(val);
+      const parsed = JSON.parse(val);
+      return Array.isArray(parsed) ? parsed : [parsed];
     } catch {
-      return fallback;
+      return undefined;
     }
   };
 
-  const rawFabrics = parseJson(payload.Fabrics || payload.fabrics, null);
-  const fabrics = rawFabrics || (fabricPrice > 0 || consm > 0 ? [
-    {
-      id: `f-${Date.now()}-1`,
-      name: payload.FabricName || payload.fabricName || 'Main Fabric',
-      spec: payload.FabricSpec || payload.fabricSpec || 'Garment Specification',
-      part: 'Body',
-      consumption: consm,
-      unit: payload.FabricUnit || payload.fabricUnit || 'Meter',
-      unitPrice: fabricPrice,
-    },
-  ] : []);
+  const fabrics = parseJson(payload.Fabrics ?? payload.fabrics);
+  if (fabrics !== undefined) result.fabrics = fabrics;
 
-  const rawAcc = parseJson(payload.Accessories || payload.accessories, null);
-  const accessories = rawAcc || (accPrice > 0 ? [
-    {
-      id: `a-${Date.now()}-1`,
-      name: 'Trims & Accessories Package',
-      spec: 'Complete package per pcs',
-      qtyPerPcs: 1,
-      unit: 'Set',
-      unitPrice: accPrice,
-    },
-  ] : []);
+  const accessories = parseJson(payload.Accessories ?? payload.accessories);
+  if (accessories !== undefined) result.accessories = accessories;
 
-  const rawServices = parseJson(payload.Services || payload.services, null);
-  const services = rawServices || (cmtPrice > 0 ? [
-    {
-      id: `s-${Date.now()}-1`,
-      name: 'CMT Service (Cutting, Making, Trimming)',
-      category: 'Direct CMT',
-      description: 'Total jasa CMT per pcs',
-      unitPrice: cmtPrice,
-    },
-  ] : []);
+  const services = parseJson(payload.Services ?? payload.services);
+  if (services !== undefined) result.services = services;
 
-  const remarks = parseJson(payload.Remarks || payload.remarks, []);
+  const remarks = parseJson(payload.Remarks ?? payload.remarks);
+  if (remarks !== undefined) result.remarks = remarks;
 
-  return {
-    precostingNo,
-    itemName,
-    targetQty,
-    image,
-    consm,
-    fabricPrice,
-    totalFabric,
-    cmtPrice,
-    accPrice,
-    hpp,
-    taxPrice,
-    status,
-    buyer,
-    category,
-    deliveryDate,
-    approvedBy,
-    approvalDate,
-    approvalNotes,
-    fabrics,
-    accessories,
-    services,
-    remarks,
-  };
+  return result;
 }
 
 export const precostingStore = {
@@ -366,14 +388,58 @@ export const precostingStore = {
     return all.find((item) => String(item.id) === String(id) || item.precostingNo === id) || null;
   },
 
-  // 3. Create precosting into PrecostingHeader
+  // 3. Create precosting into PrecostingHeader (True UPSERT by PrecostingNo)
   async create(rawData) {
     const data = normalizePrecostingInput(rawData);
 
-    const calculated = calculatePrecostingTotals({
-      ...data,
-      createdDate: data.createdDate || new Date().toISOString().split('T')[0],
+    // If precostingNo is not supplied or empty, auto-generate a valid unique number
+    if (!data.precostingNo || !data.precostingNo.trim()) {
+      data.precostingNo = `PC-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
+    } else {
+      data.precostingNo = data.precostingNo.trim();
+    }
+
+    const dbStatus = getDbStatus();
+    let existingId = null;
+
+    if (dbStatus.isConnected) {
+      try {
+        // Cek apakah data dengan PrecostingNo ini sudah ada (case-insensitive & trimmed)
+        const checkExist = await query(
+          'SELECT id FROM "PrecostingHeader" WHERE LOWER(TRIM("PrecostingNo")) = LOWER(TRIM($1)) LIMIT 1',
+          [data.precostingNo]
+        );
+        if (checkExist.rows && checkExist.rows.length > 0) {
+          existingId = checkExist.rows[0].id;
+        }
+      } catch (err) {
+        console.error('Error checking existing PrecostingNo:', err.message);
+      }
+    } else {
+      const existingMem = memoryPrecostings.find(
+        (m) => m.precostingNo && m.precostingNo.toLowerCase().trim() === data.precostingNo.toLowerCase().trim()
+      );
+      if (existingMem) existingId = existingMem.id;
+    }
+
+    // JIKA NOMOR PRECOSTING SUDAH ADA -> UPDATE SEMUA FIELD PADA RECORD TERSEBUT
+    if (existingId) {
+      return await this.update(existingId, data);
+    }
+
+    // JIKA NOMOR PRECOSTING BELUM ADA -> INSERT RECORD BARU
+    const newItem = {
+      itemName: data.itemName || 'New Garment Style',
+      targetQty: data.targetQty || 1000,
+      image: data.image || '',
+      buyer: data.buyer || 'Global Buyer',
+      category: data.category || 'Garment',
+      deliveryDate: data.deliveryDate || '',
       status: data.status || 'Pending Approval',
+      approvedBy: data.approvedBy || null,
+      approvalDate: data.approvalDate || null,
+      approvalNotes: data.approvalNotes || '',
+      createdDate: new Date().toISOString().split('T')[0],
       fabrics: data.fabrics || [],
       accessories: data.accessories || [],
       services: data.services || [],
@@ -383,95 +449,60 @@ export const precostingStore = {
           author: 'System API',
           role: 'External System',
           timestamp: new Date().toLocaleString('id-ID'),
-          text: `Precosting ${data.precostingNo} berhasil diterima dari integrasi sistem eksternal.`,
+          text: `Precosting ${data.precostingNo} berhasil ditambahkan ke database.`,
         },
       ],
-    });
+      ...data,
+    };
 
-    const dbStatus = getDbStatus();
+    const calculated = calculatePrecostingTotals(newItem);
+
     if (dbStatus.isConnected) {
       try {
-        // Cek apakah data dengan PrecostingNo ini sudah ada (upsert support)
-        const checkExist = await query(
-          'SELECT id FROM "PrecostingHeader" WHERE "PrecostingNo" = $1 LIMIT 1',
-          [calculated.precostingNo]
-        );
+        const insertSql = `
+          INSERT INTO "PrecostingHeader" (
+            "ProductImage", "ProdQty", "ProdName", "Consume", "FabricPrice", 
+            "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status",
+            "PrecostingNo", "Buyer", "Category", "DeliveryDate", "ApprovedBy", 
+            "ApprovalDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+          RETURNING id
+        `;
+        const res = await query(insertSql, [
+          calculated.image ? ensureBase64Image(calculated.image) : '',
+          calculated.targetQty || 1000,
+          calculated.itemName || 'New Garment Style',
+          calculated.mainFabricConsumption || 0,
+          calculated.mainFabricUnitPrice || 0,
+          calculated.fabricCostPerPcs || 0,
+          calculated.jasaCostPerPcs || 0,
+          calculated.accCostPerPcs || 0,
+          calculated.hppPerPcs || 0,
+          calculated.ppnPerPcs || 0,
+          calculated.status || 'Pending Approval',
+          calculated.precostingNo,
+          calculated.buyer || '',
+          calculated.category || '',
+          calculated.deliveryDate || '',
+          calculated.approvedBy || null,
+          calculated.approvalDate || null,
+          calculated.approvalNotes || '',
+          JSON.stringify(calculated.fabrics || []),
+          JSON.stringify(calculated.accessories || []),
+          JSON.stringify(calculated.services || []),
+          JSON.stringify(calculated.remarks || []),
+        ]);
 
-        if (checkExist.rows && checkExist.rows.length > 0) {
-          const existingId = checkExist.rows[0].id;
-          const updateSql = `
-            UPDATE "PrecostingHeader" SET
-              "ProductImage" = $1, "ProdQty" = $2, "ProdName" = $3, "Consume" = $4,
-              "FabricPrice" = $5, "TotalFabricPrice" = $6, "CMTPrice" = $7, "AccPrice" = $8,
-              "HPP" = $9, "TaxPrice" = $10, "Status" = $11, "Buyer" = $12, "Category" = $13,
-              "DeliveryDate" = $14, "Fabrics" = $15, "Accessories" = $16, "Services" = $17, "Remarks" = $18
-            WHERE id = $19
-            RETURNING id
-          `;
-          await query(updateSql, [
-            calculated.image || '',
-            calculated.targetQty || 1000,
-            calculated.itemName || 'New Style',
-            calculated.mainFabricConsumption || 0,
-            calculated.mainFabricUnitPrice || 0,
-            calculated.fabricCostPerPcs || 0,
-            calculated.jasaCostPerPcs || 0,
-            calculated.accCostPerPcs || 0,
-            calculated.hppPerPcs || 0,
-            calculated.ppnPerPcs || 0,
-            calculated.status || 'Pending Approval',
-            calculated.buyer || '',
-            calculated.category || '',
-            calculated.deliveryDate || '',
-            JSON.stringify(calculated.fabrics || []),
-            JSON.stringify(calculated.accessories || []),
-            JSON.stringify(calculated.services || []),
-            JSON.stringify(calculated.remarks || []),
-            existingId,
-          ]);
-          calculated.id = String(existingId);
-        } else {
-          const insertSql = `
-            INSERT INTO "PrecostingHeader" (
-              "ProductImage", "ProdQty", "ProdName", "Consume", "FabricPrice", 
-              "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status",
-              "PrecostingNo", "Buyer", "Category", "DeliveryDate", "ApprovedBy", 
-              "ApprovalDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
-            RETURNING id
-          `;
-          const res = await query(insertSql, [
-            calculated.image || '',
-            calculated.targetQty || 1000,
-            calculated.itemName || 'New Style',
-            calculated.mainFabricConsumption || 0,
-            calculated.mainFabricUnitPrice || 0,
-            calculated.fabricCostPerPcs || 0,
-            calculated.jasaCostPerPcs || 0,
-            calculated.accCostPerPcs || 0,
-            calculated.hppPerPcs || 0,
-            calculated.ppnPerPcs || 0,
-            calculated.status || 'Pending Approval',
-            calculated.precostingNo,
-            calculated.buyer || '',
-            calculated.category || '',
-            calculated.deliveryDate || '',
-            calculated.approvedBy || null,
-            calculated.approvalDate || null,
-            calculated.approvalNotes || '',
-            JSON.stringify(calculated.fabrics || []),
-            JSON.stringify(calculated.accessories || []),
-            JSON.stringify(calculated.services || []),
-            JSON.stringify(calculated.remarks || []),
-          ]);
-
-          if (res.rows && res.rows[0]) {
-            calculated.id = String(res.rows[0].id);
-          }
+        if (res.rows && res.rows[0]) {
+          calculated.id = String(res.rows[0].id);
         }
       } catch (err) {
         console.error('Error saving into PrecostingHeader table:', err.message);
       }
+    }
+
+    if (!calculated.id) {
+      calculated.id = `mem-${Date.now()}`;
     }
 
     const existingMemIdx = memoryPrecostings.findIndex(
@@ -485,17 +516,31 @@ export const precostingStore = {
     return calculated;
   },
 
-  // 4. Update PrecostingHeader
+  // 4. Update PrecostingHeader (Safe Merge, never resets unprovided fields)
   async update(id, rawData) {
     const existing = await this.getById(id);
     if (!existing) return null;
 
     const data = normalizePrecostingInput(rawData);
-    const updated = calculatePrecostingTotals({
+
+    // Merge only provided fields over existing fields
+    const merged = {
       ...existing,
       ...data,
       id: existing.id,
-    });
+      precostingNo: data.precostingNo || existing.precostingNo,
+    };
+
+    // If direct cost fields were provided or updated, keep them aligned
+    if (data.consm !== undefined || data.fabricPrice !== undefined || data.totalFabric !== undefined) {
+      const consm = data.consm !== undefined ? data.consm : existing.mainFabricConsumption;
+      const fabricPrice = data.fabricPrice !== undefined ? data.fabricPrice : existing.mainFabricUnitPrice;
+      merged.consm = consm;
+      merged.fabricPrice = fabricPrice;
+      merged.totalFabric = data.totalFabric !== undefined ? data.totalFabric : (consm * fabricPrice);
+    }
+
+    const updated = calculatePrecostingTotals(merged);
 
     const dbStatus = getDbStatus();
     if (dbStatus.isConnected) {
@@ -521,8 +566,10 @@ export const precostingStore = {
             "ProdQty" = $17,
             "Buyer" = $18,
             "Category" = $19,
-            "DeliveryDate" = $20
-          WHERE id::text = $21 OR "PrecostingNo" = $21
+            "DeliveryDate" = $20,
+            "ProductImage" = COALESCE($21, "ProductImage"),
+            "PrecostingNo" = COALESCE($22, "PrecostingNo")
+          WHERE id::text = $23 OR "PrecostingNo" = $23
         `;
         await query(updateSql, [
           updated.status,
@@ -545,14 +592,16 @@ export const precostingStore = {
           updated.buyer || '',
           updated.category || '',
           updated.deliveryDate || '',
-          String(id),
+          updated.image ? ensureBase64Image(updated.image) : null,
+          updated.precostingNo || null,
+          String(existing.id),
         ]);
       } catch (err) {
         console.error('Error updating PrecostingHeader in PostgreSQL:', err.message);
       }
     }
 
-    const index = memoryPrecostings.findIndex((p) => String(p.id) === String(id) || p.precostingNo === id);
+    const index = memoryPrecostings.findIndex((p) => String(p.id) === String(existing.id) || p.precostingNo === existing.precostingNo);
     if (index !== -1) {
       memoryPrecostings[index] = updated;
     }
@@ -645,54 +694,14 @@ export const precostingStore = {
     return await this.update(id, { remarks });
   },
 
-  // 9. POPULATE PrecostingHeader (API helper to seed / populate data)
+  // 9. POPULATE PrecostingHeader (API helper to seed / populate data with true UPSERT)
   async populateHeader(customItems = null) {
     const sourceData = Array.isArray(customItems) && customItems.length > 0 ? customItems : defaultPrecostings;
-    const populated = sourceData.map(calculatePrecostingTotals);
-
-    const dbStatus = getDbStatus();
-    if (dbStatus.isConnected) {
-      try {
-        for (const p of populated) {
-          await query(
-            `INSERT INTO "PrecostingHeader" (
-              "ProductImage", "ProdQty", "ProdName", "Consume", "FabricPrice", 
-              "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status",
-              "PrecostingNo", "Buyer", "Category", "DeliveryDate", "ApprovedBy", 
-              "ApprovalDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
-            [
-              p.image || '',
-              p.targetQty || 1000,
-              p.itemName || 'Sample Style',
-              p.mainFabricConsumption || 0,
-              p.mainFabricUnitPrice || 0,
-              p.fabricCostPerPcs || 0,
-              p.jasaCostPerPcs || 0,
-              p.accCostPerPcs || 0,
-              p.hppPerPcs || 0,
-              p.ppnPerPcs || 0,
-              p.status || 'Pending Approval',
-              p.precostingNo,
-              p.buyer || '',
-              p.category || '',
-              p.deliveryDate || '',
-              p.approvedBy || null,
-              p.approvalDate || null,
-              p.approvalNotes || '',
-              JSON.stringify(p.fabrics || []),
-              JSON.stringify(p.accessories || []),
-              JSON.stringify(p.services || []),
-              JSON.stringify(p.remarks || []),
-            ]
-          );
-        }
-      } catch (err) {
-        console.error('Error in populateHeader SQL execution:', err.message);
-      }
+    const populated = [];
+    for (const item of sourceData) {
+      const saved = await this.create(item);
+      populated.push(saved);
     }
-
-    memoryPrecostings = populated;
     return populated;
   },
 

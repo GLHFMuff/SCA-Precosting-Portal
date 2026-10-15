@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { usePrecosting } from '../../context/PrecostingContext';
 import { formatRupiah, formatNumber } from '../../utils/formatters';
+import { decodeBase64Image } from '../../utils/imageUtils';
 import { 
   X, 
   CheckCircle, 
@@ -77,7 +78,7 @@ export const ApprovalModal = () => {
           <div className="modal-item-strip">
             <div className="modal-item-strip-left">
               <img 
-                src={item.image || '/images/shirt.jpg'} 
+                src={decodeBase64Image(item.image)} 
                 alt={item.itemName} 
                 className="modal-item-thumb"
                 onError={(e) => {
