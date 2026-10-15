@@ -105,3 +105,263 @@ npm run db:seed   # Memasukkan data awal (users, 6 model precosting, kain, acc, 
 | `POST` | `/api/auth/login` | Login user |
 | `GET` | `/api/auth/users` | Daftar akun pengguna default |
 | `POST` | `/api/upload/image` | Upload gambar garmen pakaian |
+
+---
+
+## 📋 Struktur Baku JSON Payload: `POST /api/precostings` (True UPSERT)
+
+API `POST /api/precostings` telah menggunakan **skema validasi ketat (strict & fixed schema)**. Jika request mengirimkan nama field yang salah, typo, atau di luar daftar baku, server **akan menolak request** dengan status **`HTTP 400 Bad Request`** dan menampilkan daftar field yang tidak valid.
+
+### 🔄 Mekanisme True UPSERT
+1. **Jika `PrecostingNo` SUDAH ADA di database**:
+   - Server langsung melakukan **UPDATE** pada seluruh field yang dikirim.
+   - Field lain yang tidak dikirim akan mempertahankan nilai sebelumnya (tidak ter-reset ke 0).
+   - Nilai HPP dan PPN akan otomatis dihitung ulang sesuai data terbaru.
+2. **Jika `PrecostingNo` BELUM ADA di database**:
+   - Server melakukan **INSERT** record baru ke database PostgreSQL.
+   - Mengembalikan data lengkap dengan ID database baru.
+
+---
+
+### 📑 Kamus Field Baku (Fixed Schema)
+
+| Nama Field (Rekomendasi) | Alias (Frontend) | Tipe Data | Status | Keterangan & Nilai Default |
+|---|---|---|---|---|
+| `PrecostingNo` | `precostingNo` | String | **Wajib** | Nomor unik precosting (misal `"CBD-2610-00005"`, `"PC-2026-001"`). Kunci unik untuk UPSERT. |
+| `ProdName` | `itemName` | String | **Wajib** | Nama model / style pakaian (misal `"Kemeja Flanel Katun Kotak"`). |
+| `ProdQty` | `targetQty` | Number | Opsional | Kuantitas target pesanan produksi dalam Pcs (Default: `1000`). |
+| `Consume` | `consm` | Number | Opsional | Konsumsi pemakaian bahan kain utama per pcs (misal `1.6`). Default: `0`. |
+| `FabricPrice` | `fabricPrice` | Number | Opsional | Harga satuan kain per meter / kg (misal `48000`). Default: `0`. |
+| `TotalFabricPrice`| `totalFabric` | Number | Opsional | Total biaya kain (`Consume * FabricPrice`). Otomatis dihitung jika tidak dikirim. |
+| `CMTPrice` | `cmtPrice` | Number | Opsional | Total biaya jasa CMT (Cutting, Making, Trimming) per pcs (misal `28000`). Default: `0`. |
+| `AccPrice` | `accPrice` | Number | Opsional | Total biaya aksesoris, trims, label & polybag per pcs (misal `6000`). Default: `0`. |
+| `ProductImage` | `image` | String | Opsional | Gambar model pakaian dalam format Base64 string murni (`data:image/jpeg;base64,...`). |
+| `Buyer` | `buyer` | String | Opsional | Nama buyer / pemesan (misal `"Global Buyer"` atau `"Uniqlo"`). Default: `"Global Buyer"`. |
+| `Category` | `category` | String | Opsional | Kategori garmen (misal `"Garment"`, `"Kemeja"`, `"Celana"`). Default: `"Garment"`. |
+| `DeliveryDate` | `deliveryDate` | String | Opsional | Target tanggal pengiriman (format `"YYYY-MM-DD"`, misal `"2026-11-20"`). |
+| `Status` | `status` | String | Opsional | Status dokumen (`"Pending Approval"`, `"Approved"`, `"Revision"`, `"Draft"`). Default: `"Pending Approval"`. |
+| `HPP` | `hpp` | Number | Opsional | Harga Pokok Produksi. Otomatis dihitung: `(TotalFabric + CMT + Acc) * 1.025` jika tidak dikirim. |
+| `TaxPrice` | `taxPrice` | Number | Opsional | Nilai PPN 11%. Otomatis dihitung: `HPP * 0.11` jika tidak dikirim. |
+| `Fabrics` | `fabrics` | Array | Opsional | Rincian jika bahan kain lebih dari 1 jenis (Array of Object). |
+| `Accessories` | `accessories` | Array | Opsional | Rincian detail aksesoris & trims (Array of Object). |
+| `Services` | `services` | Array | Opsional | Rincian detail jasa per tahapan pengerjaan (Array of Object). |
+| `Remarks` | `remarks` | Array | Opsional | Catatan atau riwayat diskusi merchandiser (Array of Object). |
+
+> **⚠️ Peringatan Validasi:**
+> - Jika field di luar daftar di atas dikirim (misal: `"nama_kain"`, `"kode_baju"`, `"ConsmRate"`), server akan menolak dengan status **`400 Bad Request`**.
+> - Seluruh field numerik (`ProdQty`, `Consume`, `FabricPrice`, `CMTPrice`, `AccPrice`, `HPP`, `TaxPrice`) harus berupa tipe data **Number** valid (bukan string huruf seperti `"abc"`).
+
+---
+
+### 💡 Contoh Request JSON
+
+#### 1. Format Standar (Flat Costing - Paling Umum untuk Integrasi Sistem Eksternal)
+```json
+{
+  "PrecostingNo": "CBD-2610-00005",
+  "ProdName": "Kemeja Flanel Katun Kotak Regular Fit",
+  "ProdQty": 1500,
+  "Consume": 1.6,
+  "FabricPrice": 48000,
+  "CMTPrice": 28000,
+  "AccPrice": 6000,
+  "ProductImage": "data:image/jpeg;base64,/9j/4AAQSkZJRg...",
+  "Buyer": "Uniqlo Indonesia",
+  "Category": "Kemeja",
+  "DeliveryDate": "2026-11-20",
+  "Status": "Pending Approval"
+}
+```
+
+#### 2. Format Minimal (Hanya Field Wajib)
+```json
+{
+  "PrecostingNo": "CBD-2610-00006",
+  "ProdName": "Kaos Polos Cotton Combed 30s"
+}
+```
+
+#### 3. Format Rinci (Dengan Array Bahan, Aksesoris & Jasa Lengkap)
+```json
+{
+  "PrecostingNo": "PC-2026-007",
+  "ProdName": "Jaket Parka Outdoor Canvas",
+  "ProdQty": 2000,
+  "Buyer": "The North Brand",
+  "Category": "Outerwear",
+  "DeliveryDate": "2026-12-15",
+  "Status": "Pending Approval",
+  "Fabrics": [
+    {
+      "id": "f-1",
+      "name": "Kain Canvas Baby Water Repellent",
+      "spec": "Cotton Canvas 10oz",
+      "part": "Badan Utama",
+      "consumption": 2.2,
+      "unit": "Meter",
+      "unitPrice": 52000
+    },
+    {
+      "id": "f-2",
+      "name": "Furing Taffeta 190T",
+      "spec": "Polyester Furing",
+      "part": "Lapisan Dalam",
+      "consumption": 1.5,
+      "unit": "Meter",
+      "unitPrice": 16000
+    }
+  ],
+  "Accessories": [
+    {
+      "id": "a-1",
+      "name": "Zipper Gigi Besi YKK #5 Open End",
+      "spec": "Antik Brass 65cm",
+      "qtyPerPcs": 1,
+      "unit": "Pcs",
+      "unitPrice": 12500
+    },
+    {
+      "id": "a-2",
+      "name": "Snap Button Besi 15mm",
+      "spec": "Black Nickel",
+      "qtyPerPcs": 8,
+      "unit": "Pcs",
+      "unitPrice": 600
+    }
+  ],
+  "Services": [
+    {
+      "id": "s-1",
+      "name": "Jasa Potong & Bundling",
+      "category": "Direct Labor",
+      "unitPrice": 3000
+    },
+    {
+      "id": "s-2",
+      "name": "Jasa Jahit Assembly Parka",
+      "category": "Direct Labor",
+      "unitPrice": 27000
+    },
+    {
+      "id": "s-3",
+      "name": "QC, Steaming & Individual Polybag",
+      "category": "Factory Overhead",
+      "unitPrice": 4000
+    }
+  ]
+}
+```
+
+---
+
+### 📤 Contoh Respon API
+
+#### A. Respon Sukses (HTTP 201 Created / 200 OK)
+```json
+{
+  "success": true,
+  "message": "Precosting CBD-2610-00005 berhasil disimpan ke database",
+  "data": {
+    "id": "8",
+    "precostingNo": "CBD-2610-00005",
+    "itemName": "Kemeja Flanel Katun Kotak Regular Fit",
+    "targetQty": 1500,
+    "consm": 1.6,
+    "fabricPrice": 48000,
+    "totalFabric": 76800,
+    "cmtPrice": 28000,
+    "accPrice": 6000,
+    "hpp": 113570,
+    "taxPrice": 12493,
+    "status": "Pending Approval",
+    "buyer": "Uniqlo Indonesia",
+    "category": "Kemeja",
+    "deliveryDate": "2026-11-20",
+    "totalFabricCostAllQty": 115200000,
+    "totalJasaCostAllQty": 42000000,
+    "totalAccCostAllQty": 9000000,
+    "cogmPerPcs": 110800,
+    "hppPerPcs": 113570,
+    "hppAllQty": 170355000,
+    "ppnPerPcs": 12493,
+    "hppWithPpn": 126063,
+    "targetSellingPricePerPcs": 162243
+  }
+}
+```
+
+#### B. Respon Error: Nama Field Salah / Typo (HTTP 400 Bad Request)
+```json
+{
+  "success": false,
+  "message": "Nama field tidak valid: [nama_kain, harga_kain]. Harap gunakan nama field baku sesuai dokumentasi server/README.md.",
+  "invalidFields": [
+    "nama_kain",
+    "harga_kain"
+  ],
+  "standardFields": [
+    "PrecostingNo", "ProdName", "ProdQty", "Consume", "FabricPrice",
+    "CMTPrice", "AccPrice", "ProductImage", "Buyer", "Category",
+    "DeliveryDate", "Status", "Fabrics", "Accessories", "Services", "Remarks"
+  ]
+}
+```
+
+#### C. Respon Error: Field Wajib Kosong (HTTP 400 Bad Request)
+```json
+{
+  "success": false,
+  "message": "Field wajib 'PrecostingNo' (string) tidak boleh kosong. Contoh: 'CBD-2610-00005' atau 'PC-2026-001'."
+}
+```
+
+#### D. Respon Error: Tipe Data Bukan Angka (HTTP 400 Bad Request)
+```json
+{
+  "success": false,
+  "message": "Nilai field 'Consume' harus berupa angka (number), diterima: \"satu koma enam\"."
+}
+```
+
+---
+
+### 💻 Contoh Pemanggilan via cURL & JavaScript Fetch
+
+#### Menggunakan cURL:
+```bash
+curl -X POST http://localhost:5000/api/precostings \
+  -H "Content-Type: application/json" \
+  -d '{
+    "PrecostingNo": "CBD-2610-00005",
+    "ProdName": "Kemeja Flanel Kotak Regular Fit",
+    "ProdQty": 1500,
+    "Consume": 1.6,
+    "FabricPrice": 48000,
+    "CMTPrice": 28000,
+    "AccPrice": 6000
+  }'
+```
+
+#### Menggunakan JavaScript / Fetch:
+```javascript
+const response = await fetch('http://localhost:5000/api/precostings', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    PrecostingNo: 'CBD-2610-00005',
+    ProdName: 'Kemeja Flanel Kotak Regular Fit',
+    ProdQty: 1500,
+    Consume: 1.6,
+    FabricPrice: 48000,
+    CMTPrice: 28000,
+    AccPrice: 6000,
+    Buyer: 'Global Buyer',
+    Category: 'Garment',
+  }),
+});
+
+const result = await response.json();
+console.log(result);
+```

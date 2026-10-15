@@ -71,18 +71,138 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/precostings - Create new precosting
+// Standar Baku Field yang Diizinkan untuk Precosting Payload
+const ALLOWED_PRECOSTING_FIELDS = new Set([
+  // Standar Baku PascalCase (Sesuai Kolom Tabel PostgreSQL PrecostingHeader)
+  'PrecostingNo',
+  'ProdName',
+  'ProdQty',
+  'Consume',
+  'FabricPrice',
+  'TotalFabricPrice',
+  'CMTPrice',
+  'AccPrice',
+  'HPP',
+  'TaxPrice',
+  'ProductImage',
+  'Buyer',
+  'Category',
+  'DeliveryDate',
+  'Status',
+  'Fabrics',
+  'Accessories',
+  'Services',
+  'Remarks',
+
+  // Standar camelCase (Frontend)
+  'precostingNo',
+  'itemName',
+  'itemCode',
+  'targetQty',
+  'season',
+  'unit',
+  'consm',
+  'fabricPrice',
+  'totalFabric',
+  'cmtPrice',
+  'accPrice',
+  'hpp',
+  'taxPrice',
+  'image',
+  'productImage',
+  'buyer',
+  'category',
+  'deliveryDate',
+  'status',
+  'approvedBy',
+  'approvalDate',
+  'approvalNotes',
+  'fabrics',
+  'accessories',
+  'services',
+  'remarks',
+  'id',
+]);
+
+function validatePrecostingPayload(raw, isCreate = true) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { valid: false, message: 'Request body harus berupa JSON object.' };
+  }
+
+  // 1. Cek jika ada nama field yang salah / tidak dikenali (Fixed Strict Schema)
+  const unknownFields = Object.keys(raw).filter((k) => !ALLOWED_PRECOSTING_FIELDS.has(k));
+  if (unknownFields.length > 0) {
+    return {
+      valid: false,
+      message: `Nama field tidak valid: [${unknownFields.join(', ')}]. Harap gunakan nama field baku sesuai dokumentasi server/README.md.`,
+      invalidFields: unknownFields,
+      standardFields: [
+        'PrecostingNo', 'ProdName', 'ProdQty', 'Consume', 'FabricPrice',
+        'CMTPrice', 'AccPrice', 'ProductImage', 'Buyer', 'Category',
+        'DeliveryDate', 'Status', 'Fabrics', 'Accessories', 'Services', 'Remarks'
+      ],
+    };
+  }
+
+  // 2. Cek field wajib saat insert/upsert
+  if (isCreate) {
+    const precostingNo = raw.PrecostingNo ?? raw.precostingNo;
+    const prodName = raw.ProdName ?? raw.itemName;
+
+    if (!precostingNo || typeof precostingNo !== 'string' || !precostingNo.trim()) {
+      return {
+        valid: false,
+        message: "Field wajib 'PrecostingNo' (string) tidak boleh kosong. Contoh: 'CBD-2610-00005' atau 'PC-2026-001'.",
+      };
+    }
+
+    if (!prodName || typeof prodName !== 'string' || !prodName.trim()) {
+      return {
+        valid: false,
+        message: "Field wajib 'ProdName' (string) tidak boleh kosong. Contoh: 'Kemeja Katun Kotak'.",
+      };
+    }
+  }
+
+  // 3. Validasi tipe data numerik
+  const numericCheckList = [
+    { key: 'ProdQty', alt: 'targetQty' },
+    { key: 'Consume', alt: 'consm' },
+    { key: 'FabricPrice', alt: 'fabricPrice' },
+    { key: 'CMTPrice', alt: 'cmtPrice' },
+    { key: 'AccPrice', alt: 'accPrice' },
+    { key: 'HPP', alt: 'hpp' },
+    { key: 'TaxPrice', alt: 'taxPrice' },
+  ];
+
+  for (const { key, alt } of numericCheckList) {
+    const activeKey = raw[key] !== undefined ? key : (raw[alt] !== undefined ? alt : null);
+    if (activeKey !== null) {
+      const val = raw[activeKey];
+      if (val !== null && isNaN(Number(val))) {
+        return {
+          valid: false,
+          message: `Nilai field '${activeKey}' harus berupa angka (number), diterima: ${JSON.stringify(val)}.`,
+        };
+      }
+    }
+  }
+
+  return { valid: true };
+}
+
+// POST /api/precostings - Create / True UPSERT precosting
 router.post('/', async (req, res) => {
   try {
     const raw = req.body || {};
-    // Support PascalCase (PrecostingNo, ProdName), camelCase (precostingNo, itemName), and snake_case
-    const precostingNo = raw.PrecostingNo || raw.precostingNo || raw.precosting_no || raw.id;
-    const itemName = raw.ProdName || raw.prodName || raw.prod_name || raw.itemName || raw.item_name || raw.ItemName;
 
-    if (!precostingNo && !itemName) {
+    const validation = validatePrecostingPayload(raw, true);
+    if (!validation.valid) {
       return res.status(400).json({
         success: false,
-        message: 'Nomor Precosting (PrecostingNo) atau Nama Produk (ProdName) wajib diisi.',
+        message: validation.message,
+        invalidFields: validation.invalidFields,
+        standardFields: validation.standardFields,
       });
     }
 
@@ -100,7 +220,19 @@ router.post('/', async (req, res) => {
 // PUT /api/precostings/:id - Update precosting
 router.put('/:id', async (req, res) => {
   try {
-    const updated = await precostingStore.update(req.params.id, req.body);
+    const raw = req.body || {};
+
+    const validation = validatePrecostingPayload(raw, false);
+    if (!validation.valid) {
+      return res.status(400).json({
+        success: false,
+        message: validation.message,
+        invalidFields: validation.invalidFields,
+        standardFields: validation.standardFields,
+      });
+    }
+
+    const updated = await precostingStore.update(req.params.id, raw);
     if (!updated) {
       return res.status(404).json({ success: false, message: 'Precosting tidak ditemukan' });
     }
