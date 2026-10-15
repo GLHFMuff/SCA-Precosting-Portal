@@ -187,6 +187,7 @@ export function normalizePrecostingInput(payload = {}) {
   const totalFabric =
     payload.TotalFabricPrice ??
     payload.totalFabricPrice ??
+    payload.totalFabric ??
     payload.total_fabric_price ??
     payload.totalKain ??
     payload.total_kain ??
