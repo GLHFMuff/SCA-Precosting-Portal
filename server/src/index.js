@@ -74,18 +74,30 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/upload', uploadRoutes);
 
-// Root route
-app.get('/', (req, res) => {
-  res.json({
-    message: 'Cloth Precosting Portal API is running!',
-    docs: {
-      health: 'GET /api/health',
-      precostings: 'GET /api/precostings',
-      dashboardStats: 'GET /api/dashboard/stats',
-      authLogin: 'POST /api/auth/login',
-    },
+// Serve frontend static build if dist exists (Production Standalone Mode)
+const distPath = path.resolve(__dirname, '../../dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
+      return next();
+    }
+    res.sendFile(path.join(distPath, 'index.html'));
   });
-});
+} else {
+  // Root route if dist is not yet built
+  app.get('/', (req, res) => {
+    res.json({
+      message: 'Cloth Precosting Portal API is running!',
+      docs: {
+        health: 'GET /api/health',
+        precostings: 'GET /api/precostings',
+        dashboardStats: 'GET /api/dashboard/stats',
+        authLogin: 'POST /api/auth/login',
+      },
+    });
+  });
+}
 
 // 404 Handler
 app.use((req, res) => {
