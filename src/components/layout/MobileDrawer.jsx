@@ -21,7 +21,7 @@ export const MobileDrawer = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   const pendingCount = precostings.filter(p => p.status === 'Pending Approval').length;
-  const approvedCount = precostings.filter(p => p.status === 'Approved').length;
+  const approvedCount = precostings.filter(p => p.status === 'confirmed' || p.status === 'Approved').length;
 
   return (
     <div className="drawer-overlay" onClick={onClose}>
@@ -78,12 +78,12 @@ export const MobileDrawer = ({ isOpen, onClose }) => {
             className="drawer-nav-item"
             onClick={() => {
               clearSelectedPrecosting();
-              setStatusFilter('Approved');
+              setStatusFilter('confirmed');
               onClose();
             }}
           >
             <FileSpreadsheet size={18} />
-            <span>Sudah Disetujui ({approvedCount})</span>
+            <span>Confirmed ({approvedCount})</span>
           </button>
         </div>
 

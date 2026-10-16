@@ -40,6 +40,7 @@ export const testConnection = async () => {
     if (pgPool) {
       const client = await pgPool.connect();
       await client.query('SELECT NOW()');
+      await client.query('ALTER TABLE IF EXISTS "PrecostingHeader" ADD COLUMN IF NOT EXISTS "ApprovedDate" VARCHAR(50)');
       client.release();
       isConnected = true;
       console.log('✅ [Database] Berhasil terhubung ke PostgreSQL database!');

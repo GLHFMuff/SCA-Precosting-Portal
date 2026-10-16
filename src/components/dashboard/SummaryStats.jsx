@@ -15,8 +15,8 @@ export const SummaryStats = () => {
 
   const totalCount = precostings.length;
   const pendingCount = precostings.filter((p) => p.status === 'Pending Approval').length;
-  const approvedCount = precostings.filter((p) => p.status === 'Approved').length;
-  const revisionCount = precostings.filter((p) => p.status === 'Revision').length;
+  const approvedCount = precostings.filter((p) => p.status === 'confirmed' || p.status === 'Approved').length;
+  const rejectCount = precostings.filter((p) => p.status === 'reject' || p.status === 'rejected' || p.status === 'Revision').length;
 
   const totalTargetQty = precostings.reduce(
     (sum, p) => sum + (Number(p.targetQty) || 0),
@@ -68,19 +68,19 @@ export const SummaryStats = () => {
         </div>
       </div>
 
-      {/* Approved Card */}
+      {/* Confirmed Card */}
       <div 
-        className={`stat-compact-card success-card ${statusFilter === 'Approved' ? 'active-filter' : ''}`}
-        onClick={() => setStatusFilter(statusFilter === 'Approved' ? 'ALL' : 'Approved')}
+        className={`stat-compact-card success-card ${statusFilter === 'confirmed' || statusFilter === 'Approved' ? 'active-filter' : ''}`}
+        onClick={() => setStatusFilter(statusFilter === 'confirmed' ? 'ALL' : 'confirmed')}
         role="button"
         tabIndex={0}
-        title="Klik untuk filter: Sudah Disetujui"
+        title="Klik untuk filter: Confirmed"
       >
         <div className="stat-compact-icon success">
           <CheckCircle2 size={16} />
         </div>
         <div className="stat-compact-body">
-          <span className="stat-compact-title">Sudah Disetujui</span>
+          <span className="stat-compact-title">Confirmed</span>
           <div className="stat-compact-val text-emerald">
             {approvedCount} <span className="stat-compact-unit">Model</span>
           </div>

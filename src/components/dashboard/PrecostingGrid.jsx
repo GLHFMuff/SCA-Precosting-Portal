@@ -36,9 +36,9 @@ export const PrecostingGrid = () => {
     sortBy,
     setSortBy,
     setApprovalModalItem,
+    setRejectModalItem,
     setRemarksModalItem,
     approvePrecosting,
-    rejectPrecosting,
     showToast,
     isBackendOnline,
     refreshFromBackend
@@ -56,7 +56,12 @@ export const PrecostingGrid = () => {
       (item.category && item.category.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchesStatus =
-      statusFilter === 'ALL' || item.status === statusFilter;
+      statusFilter === 'ALL' ||
+      (statusFilter === 'confirmed'
+        ? item.status === 'confirmed' || item.status === 'Approved'
+        : statusFilter === 'reject'
+        ? item.status === 'reject' || item.status === 'rejected' || item.status === 'Revision'
+        : item.status === statusFilter);
 
     return matchesSearch && matchesStatus;
   });
@@ -80,10 +85,11 @@ export const PrecostingGrid = () => {
 
   const getStatusBadge = (status) => {
     switch (status) {
+      case 'confirmed':
       case 'Approved':
         return (
           <span className="badge badge-success">
-            <CheckCircle size={12} className="badge-icon-left" /> Disetujui
+            <CheckCircle size={12} className="badge-icon-left" /> Confirmed
           </span>
         );
       case 'Pending Approval':
@@ -92,10 +98,12 @@ export const PrecostingGrid = () => {
             <Clock size={12} className="badge-icon-left" /> Menunggu Otorisasi
           </span>
         );
+      case 'reject':
+      case 'rejected':
       case 'Revision':
         return (
           <span className="badge badge-danger">
-            <AlertTriangle size={12} className="badge-icon-left" /> Perlu Revisi
+            <XCircle size={12} className="badge-icon-left" /> Rejected
           </span>
         );
       case 'Draft':
@@ -109,26 +117,7 @@ export const PrecostingGrid = () => {
   };
 
   const handleApprove = (item) => {
-    if (item.status === 'Approved') {
-      // Jika sudah disetujui, buka summary modal
-      setApprovalModalItem(item);
-    } else {
-      approvePrecosting(item.id, 'Disetujui langsung melalui Action Grid');
-    }
-  };
-
-  const handleReject = (item) => {
-    if (item.status === 'Revision') {
-      if (showToast) showToast(`Precosting ${item.precostingNo} sudah berstatus Revisi / Not Approved.`, 'info');
-      return;
-    }
-    const note = window.prompt(
-      `Konfirmasi Not Approve untuk ${item.precostingNo} (${item.itemName}):\nMasukkan catatan revisi / alasan:`,
-      'Perlu penyesuaian biaya / konsumsi bahan'
-    );
-    if (note !== null) {
-      rejectPrecosting(item.id, note.trim() || 'Not Approved via Dashboard Precosting');
-    }
+    setApprovalModalItem(item);
   };
 
   return (
@@ -161,8 +150,8 @@ export const PrecostingGrid = () => {
             {[
               { id: 'ALL', label: 'Semua' },
               { id: 'Pending Approval', label: 'Menunggu Approval' },
-              { id: 'Approved', label: 'Disetujui' },
-              { id: 'Revision', label: 'Revisi' },
+              { id: 'confirmed', label: 'Confirmed' },
+              { id: 'reject', label: 'Rejected' },
               { id: 'Draft', label: 'Draft' },
             ].map((tab) => (
               <button
@@ -504,27 +493,31 @@ export const PrecostingGrid = () => {
                             <span>Detail</span>
                           </button>
 
-                          {/* Approve Button */}
-                          <button
-                            type="button"
-                            className={`btn-action btn-approve ${item.status === 'Approved' ? 'is-active-approved' : ''}`}
-                            onClick={() => handleApprove(item)}
-                            title={item.status === 'Approved' ? 'Sudah Disetujui (Klik untuk ringkasan otorisasi)' : 'Setujui Precosting Ini'}
-                          >
-                            <CheckCircle2 size={13} />
-                            <span>{item.status === 'Approved' ? 'Disetujui' : 'Approve'}</span>
-                          </button>
+                          {/* Approve Button (Hanya tampil jika belum approve/confirmed) */}
+                          {!(item.status === 'confirmed' || item.status === 'Approved') && (
+                            <button
+                              type="button"
+                              className="btn-action btn-approve"
+                              onClick={() => handleApprove(item)}
+                              title="Setujui & Konfirmasi Precosting Ini"
+                            >
+                              <CheckCircle2 size={13} />
+                              <span>Approve</span>
+                            </button>
+                          )}
 
-                          {/* Not Approve Button */}
-                          <button
-                            type="button"
-                            className={`btn-action btn-not-approve ${item.status === 'Revision' ? 'is-active-rejected' : ''}`}
-                            onClick={() => handleReject(item)}
-                            title={item.status === 'Revision' ? 'Sudah berstatus Revisi / Not Approved' : 'Not Approve / Minta Revisi'}
-                          >
-                            <XCircle size={13} />
-                            <span>{item.status === 'Revision' ? 'Revisi' : 'Not Approve'}</span>
-                          </button>
+                          {/* Reject Button (Hanya tampil jika belum di-reject) */}
+                          {!(item.status === 'reject' || item.status === 'rejected') && (
+                            <button
+                              type="button"
+                              className="btn-action btn-not-approve"
+                              onClick={() => setRejectModalItem(item)}
+                              title="Tolak (Reject) Precosting & Beri Catatan"
+                            >
+                              <XCircle size={13} />
+                              <span>Reject</span>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -706,23 +699,29 @@ export const PrecostingGrid = () => {
                     <span>Detail</span>
                   </button>
 
-                  <button
-                    type="button"
-                    className={`card-btn btn-approve ${item.status === 'Approved' ? 'is-active-approved' : ''}`}
-                    onClick={() => handleApprove(item)}
-                  >
-                    <CheckCircle2 size={14} />
-                    <span>{item.status === 'Approved' ? 'Disetujui' : 'Approve'}</span>
-                  </button>
+                  {/* Mobile Approve Button (Hanya tampil jika belum approve/confirmed) */}
+                  {!(item.status === 'confirmed' || item.status === 'Approved') && (
+                    <button
+                      type="button"
+                      className="card-btn btn-approve"
+                      onClick={() => handleApprove(item)}
+                    >
+                      <CheckCircle2 size={14} />
+                      <span>Approve</span>
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    className={`card-btn btn-not-approve ${item.status === 'Revision' ? 'is-active-rejected' : ''}`}
-                    onClick={() => handleReject(item)}
-                  >
-                    <XCircle size={14} />
-                    <span>{item.status === 'Revision' ? 'Revisi' : 'Not Approve'}</span>
-                  </button>
+                  {/* Mobile Reject Button (Hanya tampil jika belum di-reject) */}
+                  {!(item.status === 'reject' || item.status === 'rejected') && (
+                    <button
+                      type="button"
+                      className="card-btn btn-not-approve"
+                      onClick={() => setRejectModalItem(item)}
+                    >
+                      <XCircle size={14} />
+                      <span>Reject</span>
+                    </button>
+                  )}
                 </div>
               </div>
             );

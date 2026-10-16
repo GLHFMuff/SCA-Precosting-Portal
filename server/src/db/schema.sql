@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS "PrecostingHeader" (
   "DeliveryDate" VARCHAR(50),
   "ApprovedBy" VARCHAR(100),
   "ApprovalDate" VARCHAR(50),
+  "ApprovedDate" VARCHAR(50),
   "ApprovalNotes" TEXT,
   "Fabrics" JSONB DEFAULT '[]'::jsonb,
   "Accessories" JSONB DEFAULT '[]'::jsonb,

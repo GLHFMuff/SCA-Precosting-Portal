@@ -78,6 +78,7 @@ export const PrecostingProvider = ({ children }) => {
 
   // Modals state
   const [approvalModalItem, setApprovalModalItem] = useState(null);
+  const [rejectModalItem, setRejectModalItem] = useState(null);
   const [remarksModalItem, setRemarksModalItem] = useState(null);
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
 
@@ -164,10 +165,13 @@ export const PrecostingProvider = ({ children }) => {
   // Approve precosting
   const approvePrecosting = async (precostingId, approvalNotes = '') => {
     const approverName = user ? `${user.name} (${user.role})` : 'Authorized Manager';
+    const pad = (n) => String(n).padStart(2, '0');
+    const now = new Date();
+    const approvedDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
     try {
       await precostingApi.approve(precostingId, approvalNotes, approverName);
-      showToast('Precosting berhasil di-Approve di PostgreSQL!', 'success');
+      showToast('Precosting berhasil di-Approve (Confirmed)!', 'success');
       refreshFromBackend();
     } catch {
       setPrecostings((prev) =>
@@ -175,41 +179,61 @@ export const PrecostingProvider = ({ children }) => {
           if (String(item.id) === String(precostingId)) {
             return calculatePrecostingTotals({
               ...item,
-              status: 'Approved',
+              status: 'confirmed',
               approvedBy: approverName,
-              approvalDate: new Date().toISOString(),
+              approvalDate: approvedDate,
+              approvedDate: approvedDate,
               approvalNotes: approvalNotes || 'Approved via Precosting Portal',
             });
           }
           return item;
         })
       );
-      showToast('Precosting berhasil di-Approve!', 'success');
+      showToast('Precosting berhasil di-Approve (Confirmed)!', 'success');
     }
   };
 
-  // Reject / Request Revision
+  // Reject Precosting
   const rejectPrecosting = async (precostingId, reason = '') => {
-    const reviewerName = user ? `${user.name} (${user.role})` : 'Reviewer';
+    if (!reason || !reason.trim()) {
+      showToast('Remarks / catatan alasan reject wajib diisi!', 'error');
+      return false;
+    }
+
+    const reviewerName = user ? `${user.name} (${user.role})` : 'Authorized Reviewer';
+    const pad = (n) => String(n).padStart(2, '0');
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
     try {
-      await precostingApi.reject(precostingId, reason, reviewerName);
-      showToast('Status berhasil diubah menjadi Perlu Revisi di database.', 'warning');
+      await precostingApi.reject(precostingId, reason.trim(), reviewerName);
+      showToast('Precosting berhasil di-Reject dengan catatan!', 'warning');
       refreshFromBackend();
+      return true;
     } catch {
       setPrecostings((prev) =>
         prev.map((item) => {
           if (String(item.id) === String(precostingId)) {
+            const remarks = [...(item.remarks || [])];
+            remarks.unshift({
+              id: `rem-rej-${Date.now()}`,
+              author: reviewerName,
+              role: 'Reviewer',
+              timestamp,
+              text: `[REJECT]: ${reason.trim()}`,
+            });
             return calculatePrecostingTotals({
               ...item,
-              status: 'Revision',
-              approvalNotes: reason || 'Memerlukan revisi data costing',
+              status: 'reject',
+              approvalNotes: reason.trim(),
+              remarks,
             });
           }
           return item;
         })
       );
-      showToast('Status diubah menjadi Perlu Revisi.', 'warning');
+      showToast('Precosting berhasil di-Reject!', 'warning');
+      return true;
     }
   };
 
@@ -256,6 +280,8 @@ export const PrecostingProvider = ({ children }) => {
         // Modal state
         approvalModalItem,
         setApprovalModalItem,
+        rejectModalItem,
+        setRejectModalItem,
         remarksModalItem,
         setRemarksModalItem,
         isNewModalOpen,

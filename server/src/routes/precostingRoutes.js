@@ -319,7 +319,7 @@ router.post('/:id/approve', async (req, res) => {
 
     res.json({
       success: true,
-      message: `Precosting ${updated.precostingNo} berhasil disetujui (Approved)`,
+      message: `Precosting ${updated.precostingNo} berhasil dikonfirmasi (confirmed)`,
       data: updated,
     });
   } catch (error) {
@@ -327,13 +327,20 @@ router.post('/:id/approve', async (req, res) => {
   }
 });
 
-// POST /api/precostings/:id/reject - Reject / Request Revision
+// POST /api/precostings/:id/reject - Reject Precosting
 router.post('/:id/reject', async (req, res) => {
   try {
     const { reviewerName, notes } = req.body;
+    if (!notes || !notes.trim()) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Catatan / remarks alasan penolakan wajib diisi untuk melakukan reject.' 
+      });
+    }
+
     const updated = await precostingStore.reject(req.params.id, {
-      reviewerName: reviewerName || 'Reviewer',
-      notes: notes || '',
+      reviewerName: reviewerName || 'Authorized Reviewer',
+      notes: notes.trim(),
     });
 
     if (!updated) {
@@ -342,7 +349,7 @@ router.post('/:id/reject', async (req, res) => {
 
     res.json({
       success: true,
-      message: `Status Precosting ${updated.precostingNo} diubah menjadi Perlu Revisi`,
+      message: `Status Precosting ${updated.precostingNo} berhasil diubah menjadi reject`,
       data: updated,
     });
   } catch (error) {

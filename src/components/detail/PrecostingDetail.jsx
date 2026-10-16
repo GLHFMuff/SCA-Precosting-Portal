@@ -5,6 +5,7 @@ import { decodeBase64Image } from '../../utils/imageUtils';
 import { 
   ArrowLeft, 
   CheckCircle, 
+  XCircle,
   Clock, 
   AlertTriangle, 
   Printer, 
@@ -28,6 +29,7 @@ export const PrecostingDetail = () => {
     selectedPrecosting, 
     clearSelectedPrecosting, 
     setApprovalModalItem,
+    setRejectModalItem,
     addRemark,
     user 
   } = usePrecosting();
@@ -94,14 +96,27 @@ export const PrecostingDetail = () => {
             <span>Cetak / PDF</span>
           </button>
 
-          <button 
-            type="button" 
-            className={`btn-detail-action btn-detail-approve ${item.status === 'Approved' ? 'is-approved' : ''}`}
-            onClick={() => setApprovalModalItem(item)}
-          >
-            <CheckCircle size={15} />
-            <span>{item.status === 'Approved' ? 'Summary Approval' : 'Approve Precosting'}</span>
-          </button>
+          {!(item.status === 'confirmed' || item.status === 'Approved') && (
+            <button 
+              type="button" 
+              className="btn-detail-action btn-detail-approve"
+              onClick={() => setApprovalModalItem(item)}
+            >
+              <CheckCircle size={15} />
+              <span>Approve Precosting</span>
+            </button>
+          )}
+
+          {!(item.status === 'reject' || item.status === 'rejected') && (
+            <button 
+              type="button" 
+              className="btn-detail-action btn-detail-reject"
+              onClick={() => setRejectModalItem(item)}
+            >
+              <XCircle size={15} />
+              <span>Reject Precosting</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -139,9 +154,9 @@ export const PrecostingDetail = () => {
               <span className="detail-precost-no font-mono">{item.precostingNo}</span>
               <span className="detail-item-code font-mono">{item.itemCode || '-'}</span>
               <div className="detail-status-pill">
-                {item.status === 'Approved' && (
+                {(item.status === 'confirmed' || item.status === 'Approved') && (
                   <span className="badge badge-success">
-                    <CheckCircle size={13} className="badge-icon-left" /> Disetujui (Approved)
+                    <CheckCircle size={13} className="badge-icon-left" /> Confirmed
                   </span>
                 )}
                 {item.status === 'Pending Approval' && (
@@ -149,9 +164,9 @@ export const PrecostingDetail = () => {
                     <Clock size={13} className="badge-icon-left" /> Menunggu Otorisasi
                   </span>
                 )}
-                {item.status === 'Revision' && (
+                {(item.status === 'reject' || item.status === 'rejected' || item.status === 'Revision') && (
                   <span className="badge badge-danger">
-                    <AlertTriangle size={13} className="badge-icon-left" /> Perlu Revisi
+                    <XCircle size={13} className="badge-icon-left" /> Rejected
                   </span>
                 )}
                 {item.status === 'Draft' && (
@@ -193,14 +208,27 @@ export const PrecostingDetail = () => {
         </div>
 
         {/* Approval info strip if approved */}
-        {item.status === 'Approved' && (
+        {(item.status === 'confirmed' || item.status === 'Approved') && (
           <div className="approved-info-banner">
             <ShieldCheck size={18} className="approved-banner-icon" />
             <div className="approved-banner-text">
-              <strong>Telah Disetujui oleh:</strong> {item.approvedBy || 'Authorized Manager'}
-              {item.approvalDate && ` pada ${item.approvalDate}`}
+              <strong>Telah Dikonfirmasi (Approved) oleh:</strong> {item.approvedBy || 'Authorized Manager'}
+              {(item.approvedDate || item.approvalDate) && ` pada ${item.approvedDate || item.approvalDate}`}
               {item.approvalNotes && (
                 <span className="approval-notes-quote"> — "{item.approvalNotes}"</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Rejected info banner */}
+        {(item.status === 'reject' || item.status === 'rejected' || item.status === 'Revision') && (
+          <div className="rejected-info-banner">
+            <XCircle size={18} className="rejected-banner-icon" />
+            <div className="rejected-banner-text">
+              <strong>Status Precosting: Ditolak (Rejected).</strong>
+              {item.approvalNotes && (
+                <span className="approval-notes-quote"> Alasan Penolakan: "{item.approvalNotes}"</span>
               )}
             </div>
           </div>
@@ -726,14 +754,27 @@ export const PrecostingDetail = () => {
             <span>Tambah Remarks</span>
           </button>
 
-          <button
-            type="button"
-            className={`btn-bottom-approve ${item.status === 'Approved' ? 'is-approved' : ''}`}
-            onClick={() => setApprovalModalItem(item)}
-          >
-            <CheckCircle size={16} />
-            <span>{item.status === 'Approved' ? 'Lihat Summary Approval' : 'Approve Precosting Sekarang'}</span>
-          </button>
+          {!(item.status === 'confirmed' || item.status === 'Approved') && (
+            <button
+              type="button"
+              className="btn-bottom-approve"
+              onClick={() => setApprovalModalItem(item)}
+            >
+              <CheckCircle size={16} />
+              <span>Approve Precosting Sekarang</span>
+            </button>
+          )}
+
+          {!(item.status === 'reject' || item.status === 'rejected') && (
+            <button
+              type="button"
+              className="btn-bottom-reject"
+              onClick={() => setRejectModalItem(item)}
+            >
+              <XCircle size={16} />
+              <span>Reject Precosting</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

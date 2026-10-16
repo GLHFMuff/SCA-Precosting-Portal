@@ -7,6 +7,7 @@ import { SummaryStats } from './components/dashboard/SummaryStats';
 import { PrecostingGrid } from './components/dashboard/PrecostingGrid';
 import { PrecostingDetail } from './components/detail/PrecostingDetail';
 import { ApprovalModal } from './components/modals/ApprovalModal';
+import { RejectModal } from './components/modals/RejectModal';
 import { RemarksModal } from './components/modals/RemarksModal';
 import { NewPrecostingModal } from './components/modals/NewPrecostingModal';
 import { Toast } from './components/common/Toast';
@@ -55,6 +56,7 @@ function MainPortal() {
 
       {/* Modals & Popups */}
       <ApprovalModal />
+      <RejectModal />
       <RemarksModal />
       <NewPrecostingModal />
       <Toast />

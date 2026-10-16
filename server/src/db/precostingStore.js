@@ -51,9 +51,9 @@ function mapDbRowToPrecosting(row) {
     buyer: row.Buyer || 'Global Buyer',
     category: row.Category || 'Garment',
     deliveryDate: row.DeliveryDate || '',
-    createdDate: row.created_at ? new Date(row.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
     approvedBy: row.ApprovedBy || null,
-    approvalDate: row.ApprovalDate || null,
+    approvalDate: row.ApprovedDate || row.ApprovalDate || null,
+    approvedDate: row.ApprovedDate || row.ApprovalDate || null,
     approvalNotes: row.ApprovalNotes || '',
     bufferRate: 0.025,
     markupRate: 0.30,
@@ -289,8 +289,10 @@ function parseNumeric(val) {
   if (payload.ApprovedBy !== undefined || payload.approvedBy !== undefined) {
     result.approvedBy = payload.ApprovedBy ?? payload.approvedBy;
   }
-  if (payload.ApprovalDate !== undefined || payload.approvalDate !== undefined) {
-    result.approvalDate = payload.ApprovalDate ?? payload.approvalDate;
+  const apprDate = payload.ApprovedDate ?? payload.approvedDate ?? payload.ApprovalDate ?? payload.approvalDate;
+  if (apprDate !== undefined) {
+    result.approvedDate = apprDate;
+    result.approvalDate = apprDate;
   }
   if (payload.ApprovalNotes !== undefined || payload.approvalNotes !== undefined) {
     result.approvalNotes = payload.ApprovalNotes ?? payload.approvalNotes;
@@ -351,7 +353,7 @@ export const precostingStore = {
           id, "ProductImage", "ProdQty", "ProdName", "Consume", "FabricPrice", 
           "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status",
           created_at, "PrecostingNo", "Buyer", "Category", "DeliveryDate",
-          "ApprovedBy", "ApprovalDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
+          "ApprovedBy", "ApprovalDate", "ApprovedDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
         FROM "PrecostingHeader" 
         ORDER BY id DESC
       `;
@@ -397,7 +399,7 @@ export const precostingStore = {
           id, "ProductImage", "ProdQty", "ProdName", "Consume", "FabricPrice", 
           "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status",
           created_at, "PrecostingNo", "Buyer", "Category", "DeliveryDate",
-          "ApprovedBy", "ApprovalDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
+          "ApprovedBy", "ApprovalDate", "ApprovedDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
         FROM "PrecostingHeader" 
         WHERE id::text = $1 OR "PrecostingNo" = $1
         LIMIT 1
@@ -460,7 +462,8 @@ export const precostingStore = {
       deliveryDate: data.deliveryDate || '',
       status: data.status || 'Pending Approval',
       approvedBy: data.approvedBy || null,
-      approvalDate: data.approvalDate || null,
+      approvalDate: data.approvalDate || data.approvedDate || null,
+      approvedDate: data.approvedDate || data.approvalDate || null,
       approvalNotes: data.approvalNotes || '',
       createdDate: new Date().toISOString().split('T')[0],
       fabrics: data.fabrics || [],
@@ -486,8 +489,8 @@ export const precostingStore = {
           "ProductImage", "ProdQty", "ProdName", "Consume", "FabricPrice", 
           "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status",
           "PrecostingNo", "Buyer", "Category", "DeliveryDate", "ApprovedBy", 
-          "ApprovalDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+          "ApprovalDate", "ApprovedDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
         RETURNING id
       `;
       const res = await query(insertSql, [
@@ -507,7 +510,8 @@ export const precostingStore = {
         calculated.category || '',
         calculated.deliveryDate || '',
         calculated.approvedBy || null,
-        calculated.approvalDate || null,
+        calculated.approvalDate || calculated.approvedDate || null,
+        calculated.approvedDate || calculated.approvalDate || null,
         calculated.approvalNotes || '',
         JSON.stringify(calculated.fabrics || []),
         JSON.stringify(calculated.accessories || []),
@@ -569,6 +573,7 @@ export const precostingStore = {
           "Status" = $1,
           "ApprovedBy" = $2,
           "ApprovalDate" = $3,
+          "ApprovedDate" = $3,
           "ApprovalNotes" = $4,
           "Consume" = $5,
           "FabricPrice" = $6,
@@ -593,7 +598,7 @@ export const precostingStore = {
       await query(updateSql, [
         updated.status,
         updated.approvedBy,
-        updated.approvalDate,
+        updated.approvedDate || updated.approvalDate || null,
         updated.approvalNotes,
         updated.mainFabricConsumption || 0,
         updated.mainFabricUnitPrice || 0,
@@ -645,7 +650,9 @@ export const precostingStore = {
     const item = await this.getById(id);
     if (!item) return null;
 
-    const timestamp = new Date().toLocaleString('id-ID');
+    const pad = (n) => String(n).padStart(2, '0');
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
     const remarks = [...(item.remarks || [])];
 
     if (notes && notes.trim()) {
@@ -659,35 +666,38 @@ export const precostingStore = {
     }
 
     return await this.update(id, {
-      status: 'Approved',
+      status: 'confirmed',
       approvedBy: approverName,
       approvalDate: timestamp,
+      approvedDate: timestamp,
       approvalNotes: notes || 'Approved via Precosting Portal',
       remarks,
     });
   },
 
-  // 7. Reject / Request Revision
+  // 7. Reject
   async reject(id, { reviewerName = 'Reviewer', notes = '' } = {}) {
     const item = await this.getById(id);
     if (!item) return null;
 
-    const timestamp = new Date().toLocaleString('id-ID');
+    const pad = (n) => String(n).padStart(2, '0');
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
     const remarks = [...(item.remarks || [])];
 
     if (notes && notes.trim()) {
       remarks.unshift({
-        id: `rem-rev-${Date.now()}`,
+        id: `rem-rej-${Date.now()}`,
         author: reviewerName,
         role: 'Reviewer',
         timestamp,
-        text: `[PERMINTAAN REVISI]: ${notes.trim()}`,
+        text: `[REJECT]: ${notes.trim()}`,
       });
     }
 
     return await this.update(id, {
-      status: 'Revision',
-      approvalNotes: notes || 'Memerlukan revisi data costing',
+      status: 'reject',
+      approvalNotes: notes ? notes.trim() : 'Rejected via Precosting Portal',
       remarks,
     });
   },
@@ -725,8 +735,8 @@ export const precostingStore = {
     const items = await this.getAll();
     const totalCount = items.length;
     const pendingCount = items.filter((p) => p.status === 'Pending Approval').length;
-    const approvedCount = items.filter((p) => p.status === 'Approved').length;
-    const revisionCount = items.filter((p) => p.status === 'Revision').length;
+    const approvedCount = items.filter((p) => p.status === 'confirmed' || p.status === 'Approved').length;
+    const revisionCount = items.filter((p) => p.status === 'reject' || p.status === 'rejected' || p.status === 'Revision').length;
     const draftCount = items.filter((p) => p.status === 'Draft').length;
 
     const totalTargetQty = items.reduce((sum, p) => sum + (Number(p.targetQty) || 0), 0);

@@ -5,44 +5,35 @@ import { decodeBase64Image } from '../../utils/imageUtils';
 import { 
   X, 
   CheckCircle, 
+  XCircle,
   ShieldCheck, 
-  AlertTriangle, 
   FileText, 
   Scissors, 
   Package, 
   Layers, 
-  DollarSign, 
-  TrendingUp 
+  TrendingUp,
+  MessageSquare,
+  UserCheck
 } from 'lucide-react';
 
 export const ApprovalModal = () => {
   const { 
     approvalModalItem, 
     setApprovalModalItem, 
+    setRejectModalItem,
     approvePrecosting, 
-    rejectPrecosting, 
     user 
   } = usePrecosting();
 
   const [approvalNotes, setApprovalNotes] = useState('');
-  const [activeAction, setActiveAction] = useState(null); // 'approve' | 'reject'
 
   if (!approvalModalItem) return null;
 
   const item = approvalModalItem;
-  const isAlreadyApproved = item.status === 'Approved';
+  const isAlreadyApproved = item.status === 'confirmed' || item.status === 'Approved';
 
   const handleApprove = () => {
     approvePrecosting(item.id, approvalNotes);
-    setApprovalModalItem(null);
-  };
-
-  const handleReject = () => {
-    if (!approvalNotes.trim()) {
-      alert('Mohon cantumkan alasan atau poin revisi di kolom catatan.');
-      return;
-    }
-    rejectPrecosting(item.id, approvalNotes);
     setApprovalModalItem(null);
   };
 
@@ -203,7 +194,7 @@ export const ApprovalModal = () => {
             <div className="already-approved-note">
               <CheckCircle size={16} className="text-emerald" />
               <span>
-                Precosting ini <strong>sudah berstatus Disetujui</strong> sebelumnya oleh {item.approvedBy || 'Manager'}.
+                Precosting ini <strong>sudah berstatus Confirmed (Disetujui)</strong> sebelumnya oleh {item.approvedBy || 'Manager'}.
                 Anda dapat memperbarui catatan approval atau mengonfirmasi ulang.
               </span>
             </div>
@@ -212,17 +203,22 @@ export const ApprovalModal = () => {
           {/* Remarks & Approval Note Input */}
           <div className="form-group approval-remarks-group">
             <label className="form-label font-semibold">
-              Catatan Approval / Catatan Revisi:
+              <MessageSquare size={14} className="text-emerald" />
+              <span>Catatan Approval (Opsional):</span>
             </label>
             <textarea
-              className="form-textarea"
+              className="form-textarea approval-textarea"
               rows="3"
-              placeholder="Tuliskan catatan otorisasi (contoh: Disetujui dengan batas toleransi kain 2%, target delivery wajib dipatuhi...)"
+              placeholder="Tuliskan catatan otorisasi jika ada (contoh: Disetujui dengan batas toleransi kain 2%, target delivery wajib dipatuhi...)"
               value={approvalNotes}
               onChange={(e) => setApprovalNotes(e.target.value)}
             />
             <div className="form-input-hint">
-              Otorisasi oleh: <strong>{user ? `${user.name} (${user.role})` : 'Authorized Approver'}</strong>
+              <span className="hint-user-info">
+                <UserCheck size={13} className="text-emerald" />
+                <span>Otorisasi oleh: <strong>{user ? `${user.name} (${user.role})` : 'Authorized Approver'}</strong></span>
+              </span>
+              <span className="hint-char-count font-mono">{approvalNotes.length} karakter</span>
             </div>
           </div>
         </div>
@@ -237,24 +233,31 @@ export const ApprovalModal = () => {
             Batal
           </button>
 
-          <button 
-            type="button" 
-            className="btn-modal-revision"
-            onClick={handleReject}
-            title="Kirim status Revisi ke Merchandiser"
-          >
-            <AlertTriangle size={15} />
-            <span>Minta Revisi</span>
-          </button>
+          {/* Button Reject */}
+          {!(item.status === 'reject' || item.status === 'rejected') && (
+            <button 
+              type="button" 
+              className="btn-modal-revision"
+              onClick={() => {
+                setRejectModalItem(item);
+              }}
+              title="Tolak Precosting & Tambahkan Remarks"
+            >
+              <XCircle size={15} />
+              <span>Reject</span>
+            </button>
+          )}
 
-          <button 
-            type="button" 
-            className="btn-modal-confirm-approve"
-            onClick={handleApprove}
-          >
-            <CheckCircle size={16} />
-            <span>Konfirmasi & Approve</span>
-          </button>
+          {!(item.status === 'confirmed' || item.status === 'Approved') && (
+            <button 
+              type="button" 
+              className="btn-modal-confirm-approve"
+              onClick={handleApprove}
+            >
+              <CheckCircle size={16} />
+              <span>Konfirmasi & Approve</span>
+            </button>
+          )}
         </div>
       </div>
     </div>
