@@ -274,7 +274,13 @@ function parseNumeric(val) {
   }
 
   // DeliveryDate
-  const deliveryDate = payload.DeliveryDate ?? payload.deliveryDate ?? payload.delivery_date ?? null;
+  const deliveryDate =
+    payload.DeliveryDate ??
+    payload.deliveryDate ??
+    payload.delivery_date ??
+    payload.Delivery_Date ??
+    payload.deliveryDateStr ??
+    null;
   if (deliveryDate !== null && deliveryDate !== undefined) {
     result.deliveryDate = String(deliveryDate).trim();
   }

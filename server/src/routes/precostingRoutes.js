@@ -94,29 +94,52 @@ const ALLOWED_PRECOSTING_FIELDS = new Set([
   'Services',
   'Remarks',
 
-  // Standar camelCase (Frontend)
+  // Standar camelCase & snake_case
   'precostingNo',
+  'precosting_no',
   'itemName',
+  'item_name',
+  'prodName',
+  'prod_name',
   'itemCode',
+  'item_code',
   'targetQty',
+  'target_qty',
+  'prodQty',
+  'prod_qty',
   'season',
   'unit',
   'consm',
+  'consume',
   'fabricPrice',
+  'fabric_price',
   'totalFabric',
+  'total_fabric',
+  'totalFabricPrice',
+  'total_fabric_price',
   'cmtPrice',
+  'cmt_price',
   'accPrice',
+  'acc_price',
   'hpp',
   'taxPrice',
+  'tax_price',
   'image',
   'productImage',
+  'product_image',
   'buyer',
   'category',
   'deliveryDate',
+  'delivery_date',
+  'Delivery_Date',
+  'deliveryDateStr',
   'status',
   'approvedBy',
+  'approved_by',
   'approvalDate',
+  'approval_date',
   'approvalNotes',
+  'approval_notes',
   'fabrics',
   'accessories',
   'services',
@@ -213,6 +236,8 @@ router.post('/', async (req, res) => {
     if (!validation.valid) {
       return res.status(400).json({
         success: false,
+        status: '0',
+        error_list: validation.message,
         message: validation.message,
         invalidFields: validation.invalidFields,
         standardFields: validation.standardFields,
@@ -222,11 +247,18 @@ router.post('/', async (req, res) => {
     const created = await precostingStore.create(raw);
     res.status(201).json({
       success: true,
+      status: '1',
+      error_list: '',
       message: `Precosting ${created.precostingNo} berhasil disimpan ke database`,
       data: created,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      status: '0',
+      error_list: error.message,
+      message: error.message,
+    });
   }
 });
 
