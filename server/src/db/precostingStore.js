@@ -146,101 +146,113 @@ export function normalizePrecostingInput(payload = {}) {
     result.image = ensureBase64Image(rawImage);
   }
 
+function parseNumeric(val) {
+  if (val === null || val === undefined || val === '') return null;
+  if (typeof val === 'number') return isNaN(val) ? null : val;
+  if (typeof val === 'string') {
+    const cleaned = val.replace(/,/g, '').trim();
+    if (cleaned === '') return null;
+    const num = Number(cleaned);
+    return isNaN(num) ? null : num;
+  }
+  return null;
+}
+
   // ProdQty / TargetQty
-  const qty =
+  const qty = parseNumeric(
     payload.ProdQty ??
     payload.prodQty ??
     payload.prod_qty ??
     payload.targetQty ??
     payload.target_qty ??
-    payload.qty ??
-    null;
-  if (qty !== null && qty !== undefined && !isNaN(Number(qty))) {
-    result.targetQty = Number(qty);
+    payload.qty
+  );
+  if (qty !== null) {
+    result.targetQty = qty;
   }
 
   // Consume / consm
-  const consm =
+  const consm = parseNumeric(
     payload.Consume ??
     payload.consume ??
     payload.consm ??
-    payload.mainFabricConsumption ??
-    null;
-  if (consm !== null && consm !== undefined && !isNaN(Number(consm))) {
-    result.consm = Number(consm);
+    payload.mainFabricConsumption
+  );
+  if (consm !== null) {
+    result.consm = consm;
   }
 
   // FabricPrice
-  const fabricPrice =
+  const fabricPrice = parseNumeric(
     payload.FabricPrice ??
     payload.fabricPrice ??
     payload.fabric_price ??
     payload.hargaFabric ??
     payload.harga_fabric ??
-    payload.mainFabricUnitPrice ??
-    null;
-  if (fabricPrice !== null && fabricPrice !== undefined && !isNaN(Number(fabricPrice))) {
-    result.fabricPrice = Number(fabricPrice);
+    payload.mainFabricUnitPrice
+  );
+  if (fabricPrice !== null) {
+    result.fabricPrice = fabricPrice;
   }
 
   // TotalFabricPrice
-  const totalFabric =
+  const totalFabric = parseNumeric(
     payload.TotalFabricPrice ??
     payload.totalFabricPrice ??
     payload.totalFabric ??
     payload.total_fabric_price ??
     payload.totalKain ??
-    payload.total_kain ??
-    null;
-  if (totalFabric !== null && totalFabric !== undefined && !isNaN(Number(totalFabric))) {
-    result.totalFabric = Number(totalFabric);
+    payload.total_kain
+  );
+  if (totalFabric !== null) {
+    result.totalFabric = totalFabric;
   }
 
   // CMTPrice
-  const cmtPrice =
+  const cmtPrice = parseNumeric(
     payload.CMTPrice ??
     payload.cmtPrice ??
     payload.cmt_price ??
     payload.hargaCmt ??
     payload.harga_cmt ??
-    payload.jasaCostPerPcs ??
-    null;
-  if (cmtPrice !== null && cmtPrice !== undefined && !isNaN(Number(cmtPrice))) {
-    result.cmtPrice = Number(cmtPrice);
+    payload.jasaCostPerPcs
+  );
+  if (cmtPrice !== null) {
+    result.cmtPrice = cmtPrice;
   }
 
   // AccPrice
-  const accPrice =
+  const accPrice = parseNumeric(
     payload.AccPrice ??
     payload.accPrice ??
     payload.acc_price ??
     payload.hargaAccessories ??
     payload.harga_accessories ??
-    payload.accCostPerPcs ??
-    null;
-  if (accPrice !== null && accPrice !== undefined && !isNaN(Number(accPrice))) {
-    result.accPrice = Number(accPrice);
+    payload.accCostPerPcs
+  );
+  if (accPrice !== null) {
+    result.accPrice = accPrice;
   }
 
   // HPP
-  const hpp =
+  const hpp = parseNumeric(
     payload.HPP ??
     payload.hpp ??
-    payload.hppPerPcs ??
-    null;
-  if (hpp !== null && hpp !== undefined && !isNaN(Number(hpp))) {
-    result.hpp = Number(hpp);
+    payload.hppPerPcs
+  );
+  if (hpp !== null) {
+    result.hpp = hpp;
   }
 
   // TaxPrice / PPN
-  const taxPrice =
+  const taxPrice = parseNumeric(
     payload.TaxPrice ??
     payload.taxPrice ??
     payload.ppn ??
-    payload.ppnPerPcs ??
-    null;
-  if (taxPrice !== null && taxPrice !== undefined && !isNaN(Number(taxPrice))) {
-    result.taxPrice = Number(taxPrice);
+    payload.ppnPerPcs
+  );
+  if (taxPrice !== null) {
+    result.taxPrice = taxPrice;
   }
 
   // Status
@@ -292,13 +304,30 @@ export function normalizePrecostingInput(payload = {}) {
   };
 
   const fabrics = parseJson(payload.Fabrics ?? payload.fabrics);
-  if (fabrics !== undefined) result.fabrics = fabrics;
+  if (fabrics !== undefined) {
+    result.fabrics = fabrics.map((f) => ({
+      ...f,
+      consumption: parseNumeric(f.consumption) ?? f.consumption,
+      unitPrice: parseNumeric(f.unitPrice) ?? f.unitPrice,
+    }));
+  }
 
   const accessories = parseJson(payload.Accessories ?? payload.accessories);
-  if (accessories !== undefined) result.accessories = accessories;
+  if (accessories !== undefined) {
+    result.accessories = accessories.map((a) => ({
+      ...a,
+      qtyPerPcs: parseNumeric(a.qtyPerPcs) ?? a.qtyPerPcs,
+      unitPrice: parseNumeric(a.unitPrice) ?? a.unitPrice,
+    }));
+  }
 
   const services = parseJson(payload.Services ?? payload.services);
-  if (services !== undefined) result.services = services;
+  if (services !== undefined) {
+    result.services = services.map((s) => ({
+      ...s,
+      unitPrice: parseNumeric(s.unitPrice) ?? s.unitPrice,
+    }));
+  }
 
   const remarks = parseJson(payload.Remarks ?? payload.remarks);
   if (remarks !== undefined) result.remarks = remarks;
@@ -309,28 +338,22 @@ export function normalizePrecostingInput(payload = {}) {
 export const precostingStore = {
   // 1. Get all from PrecostingHeader with search, status filter, and sorting
   async getAll({ search = '', status = 'ALL', sortBy = 'date-desc' } = {}) {
-    const dbStatus = getDbStatus();
-
     let items = [];
-    if (dbStatus.isConnected) {
-      try {
-        const queryText = `
-          SELECT 
-            id, "ProductImage", "ProdQty", "ProdName", "Consume", "FabricPrice", 
-            "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status",
-            created_at, "PrecostingNo", "Buyer", "Category", "DeliveryDate",
-            "ApprovedBy", "ApprovalDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
-          FROM "PrecostingHeader" 
-          ORDER BY id DESC
-        `;
-        const res = await query(queryText);
-        const rows = res.rows || res;
-        items = rows.map(mapDbRowToPrecosting);
-      } catch (err) {
-        console.error('Error querying PrecostingHeader from PostgreSQL, fallback to memory:', err.message);
-        items = memoryPrecostings;
-      }
-    } else {
+    try {
+      const queryText = `
+        SELECT 
+          id, "ProductImage", "ProdQty", "ProdName", "Consume", "FabricPrice", 
+          "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status",
+          created_at, "PrecostingNo", "Buyer", "Category", "DeliveryDate",
+          "ApprovedBy", "ApprovalDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
+        FROM "PrecostingHeader" 
+        ORDER BY id DESC
+      `;
+      const res = await query(queryText);
+      const rows = res.rows || res;
+      items = rows.map(mapDbRowToPrecosting);
+    } catch (err) {
+      console.warn('Querying PrecostingHeader from PostgreSQL fallback to memory:', err.message);
       items = memoryPrecostings;
     }
 
@@ -362,27 +385,24 @@ export const precostingStore = {
 
   // 2. Get single PrecostingHeader by ID
   async getById(id) {
-    const dbStatus = getDbStatus();
-    if (dbStatus.isConnected) {
-      try {
-        const queryText = `
-          SELECT 
-            id, "ProductImage", "ProdQty", "ProdName", "Consume", "FabricPrice", 
-            "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status",
-            created_at, "PrecostingNo", "Buyer", "Category", "DeliveryDate",
-            "ApprovedBy", "ApprovalDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
-          FROM "PrecostingHeader" 
-          WHERE id::text = $1 OR "PrecostingNo" = $1
-          LIMIT 1
-        `;
-        const res = await query(queryText, [String(id)]);
-        const rows = res.rows || res;
-        if (rows && rows.length > 0) {
-          return mapDbRowToPrecosting(rows[0]);
-        }
-      } catch (err) {
-        console.error('Error fetching single header:', err.message);
+    try {
+      const queryText = `
+        SELECT 
+          id, "ProductImage", "ProdQty", "ProdName", "Consume", "FabricPrice", 
+          "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status",
+          created_at, "PrecostingNo", "Buyer", "Category", "DeliveryDate",
+          "ApprovedBy", "ApprovalDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
+        FROM "PrecostingHeader" 
+        WHERE id::text = $1 OR "PrecostingNo" = $1
+        LIMIT 1
+      `;
+      const res = await query(queryText, [String(id)]);
+      const rows = res.rows || res;
+      if (rows && rows.length > 0) {
+        return mapDbRowToPrecosting(rows[0]);
       }
+    } catch (err) {
+      // Fallback
     }
 
     const all = await this.getAll();
@@ -400,23 +420,19 @@ export const precostingStore = {
       data.precostingNo = data.precostingNo.trim();
     }
 
-    const dbStatus = getDbStatus();
     let existingId = null;
 
-    if (dbStatus.isConnected) {
-      try {
-        // Cek apakah data dengan PrecostingNo ini sudah ada (case-insensitive & trimmed)
-        const checkExist = await query(
-          'SELECT id FROM "PrecostingHeader" WHERE LOWER(TRIM("PrecostingNo")) = LOWER(TRIM($1)) LIMIT 1',
-          [data.precostingNo]
-        );
-        if (checkExist.rows && checkExist.rows.length > 0) {
-          existingId = checkExist.rows[0].id;
-        }
-      } catch (err) {
-        console.error('Error checking existing PrecostingNo:', err.message);
+    try {
+      // Cek apakah data dengan PrecostingNo ini sudah ada (case-insensitive & trimmed)
+      const checkExist = await query(
+        'SELECT id FROM "PrecostingHeader" WHERE LOWER(TRIM("PrecostingNo")) = LOWER(TRIM($1)) LIMIT 1',
+        [data.precostingNo]
+      );
+      if (checkExist.rows && checkExist.rows.length > 0) {
+        existingId = checkExist.rows[0].id;
       }
-    } else {
+    } catch (err) {
+      console.warn('Error checking existing PrecostingNo:', err.message);
       const existingMem = memoryPrecostings.find(
         (m) => m.precostingNo && m.precostingNo.toLowerCase().trim() === data.precostingNo.toLowerCase().trim()
       );
@@ -458,48 +474,46 @@ export const precostingStore = {
 
     const calculated = calculatePrecostingTotals(newItem);
 
-    if (dbStatus.isConnected) {
-      try {
-        const insertSql = `
-          INSERT INTO "PrecostingHeader" (
-            "ProductImage", "ProdQty", "ProdName", "Consume", "FabricPrice", 
-            "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status",
-            "PrecostingNo", "Buyer", "Category", "DeliveryDate", "ApprovedBy", 
-            "ApprovalDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
-          RETURNING id
-        `;
-        const res = await query(insertSql, [
-          calculated.image ? ensureBase64Image(calculated.image) : '',
-          calculated.targetQty || 1000,
-          calculated.itemName || 'New Garment Style',
-          calculated.mainFabricConsumption || 0,
-          calculated.mainFabricUnitPrice || 0,
-          calculated.fabricCostPerPcs || 0,
-          calculated.jasaCostPerPcs || 0,
-          calculated.accCostPerPcs || 0,
-          calculated.hppPerPcs || 0,
-          calculated.ppnPerPcs || 0,
-          calculated.status || 'Pending Approval',
-          calculated.precostingNo,
-          calculated.buyer || '',
-          calculated.category || '',
-          calculated.deliveryDate || '',
-          calculated.approvedBy || null,
-          calculated.approvalDate || null,
-          calculated.approvalNotes || '',
-          JSON.stringify(calculated.fabrics || []),
-          JSON.stringify(calculated.accessories || []),
-          JSON.stringify(calculated.services || []),
-          JSON.stringify(calculated.remarks || []),
-        ]);
+    try {
+      const insertSql = `
+        INSERT INTO "PrecostingHeader" (
+          "ProductImage", "ProdQty", "ProdName", "Consume", "FabricPrice", 
+          "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status",
+          "PrecostingNo", "Buyer", "Category", "DeliveryDate", "ApprovedBy", 
+          "ApprovalDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+        RETURNING id
+      `;
+      const res = await query(insertSql, [
+        calculated.image ? ensureBase64Image(calculated.image) : '',
+        calculated.targetQty || 1000,
+        calculated.itemName || 'New Garment Style',
+        calculated.mainFabricConsumption || 0,
+        calculated.mainFabricUnitPrice || 0,
+        calculated.fabricCostPerPcs || 0,
+        calculated.jasaCostPerPcs || 0,
+        calculated.accCostPerPcs || 0,
+        calculated.hppPerPcs || 0,
+        calculated.ppnPerPcs || 0,
+        calculated.status || 'Pending Approval',
+        calculated.precostingNo,
+        calculated.buyer || '',
+        calculated.category || '',
+        calculated.deliveryDate || '',
+        calculated.approvedBy || null,
+        calculated.approvalDate || null,
+        calculated.approvalNotes || '',
+        JSON.stringify(calculated.fabrics || []),
+        JSON.stringify(calculated.accessories || []),
+        JSON.stringify(calculated.services || []),
+        JSON.stringify(calculated.remarks || []),
+      ]);
 
-        if (res.rows && res.rows[0]) {
-          calculated.id = String(res.rows[0].id);
-        }
-      } catch (err) {
-        console.error('Error saving into PrecostingHeader table:', err.message);
+      if (res.rows && res.rows[0]) {
+        calculated.id = String(res.rows[0].id);
       }
+    } catch (err) {
+      console.warn('Error saving into PrecostingHeader table (fallback to memory):', err.message);
     }
 
     if (!calculated.id) {
@@ -543,63 +557,60 @@ export const precostingStore = {
 
     const updated = calculatePrecostingTotals(merged);
 
-    const dbStatus = getDbStatus();
-    if (dbStatus.isConnected) {
-      try {
-        const updateSql = `
-          UPDATE "PrecostingHeader" SET
-            "Status" = $1,
-            "ApprovedBy" = $2,
-            "ApprovalDate" = $3,
-            "ApprovalNotes" = $4,
-            "Consume" = $5,
-            "FabricPrice" = $6,
-            "TotalFabricPrice" = $7,
-            "CMTPrice" = $8,
-            "AccPrice" = $9,
-            "HPP" = $10,
-            "TaxPrice" = $11,
-            "Remarks" = $12,
-            "Fabrics" = $13,
-            "Accessories" = $14,
-            "Services" = $15,
-            "ProdName" = $16,
-            "ProdQty" = $17,
-            "Buyer" = $18,
-            "Category" = $19,
-            "DeliveryDate" = $20,
-            "ProductImage" = COALESCE($21, "ProductImage"),
-            "PrecostingNo" = COALESCE($22, "PrecostingNo")
-          WHERE id::text = $23 OR "PrecostingNo" = $23
-        `;
-        await query(updateSql, [
-          updated.status,
-          updated.approvedBy,
-          updated.approvalDate,
-          updated.approvalNotes,
-          updated.mainFabricConsumption || 0,
-          updated.mainFabricUnitPrice || 0,
-          updated.fabricCostPerPcs || 0,
-          updated.jasaCostPerPcs || 0,
-          updated.accCostPerPcs || 0,
-          updated.hppPerPcs || 0,
-          updated.ppnPerPcs || 0,
-          JSON.stringify(updated.remarks || []),
-          JSON.stringify(updated.fabrics || []),
-          JSON.stringify(updated.accessories || []),
-          JSON.stringify(updated.services || []),
-          updated.itemName,
-          updated.targetQty,
-          updated.buyer || '',
-          updated.category || '',
-          updated.deliveryDate || '',
-          updated.image ? ensureBase64Image(updated.image) : null,
-          updated.precostingNo || null,
-          String(existing.id),
-        ]);
-      } catch (err) {
-        console.error('Error updating PrecostingHeader in PostgreSQL:', err.message);
-      }
+    try {
+      const updateSql = `
+        UPDATE "PrecostingHeader" SET
+          "Status" = $1,
+          "ApprovedBy" = $2,
+          "ApprovalDate" = $3,
+          "ApprovalNotes" = $4,
+          "Consume" = $5,
+          "FabricPrice" = $6,
+          "TotalFabricPrice" = $7,
+          "CMTPrice" = $8,
+          "AccPrice" = $9,
+          "HPP" = $10,
+          "TaxPrice" = $11,
+          "Remarks" = $12,
+          "Fabrics" = $13,
+          "Accessories" = $14,
+          "Services" = $15,
+          "ProdName" = $16,
+          "ProdQty" = $17,
+          "Buyer" = $18,
+          "Category" = $19,
+          "DeliveryDate" = $20,
+          "ProductImage" = COALESCE($21, "ProductImage"),
+          "PrecostingNo" = COALESCE($22, "PrecostingNo")
+        WHERE id::text = $23 OR "PrecostingNo" = $23
+      `;
+      await query(updateSql, [
+        updated.status,
+        updated.approvedBy,
+        updated.approvalDate,
+        updated.approvalNotes,
+        updated.mainFabricConsumption || 0,
+        updated.mainFabricUnitPrice || 0,
+        updated.fabricCostPerPcs || 0,
+        updated.jasaCostPerPcs || 0,
+        updated.accCostPerPcs || 0,
+        updated.hppPerPcs || 0,
+        updated.ppnPerPcs || 0,
+        JSON.stringify(updated.remarks || []),
+        JSON.stringify(updated.fabrics || []),
+        JSON.stringify(updated.accessories || []),
+        JSON.stringify(updated.services || []),
+        updated.itemName,
+        updated.targetQty,
+        updated.buyer || '',
+        updated.category || '',
+        updated.deliveryDate || '',
+        updated.image ? ensureBase64Image(updated.image) : null,
+        updated.precostingNo || null,
+        String(existing.id),
+      ]);
+    } catch (err) {
+      console.error('Error updating PrecostingHeader in PostgreSQL:', err.message);
     }
 
     const index = memoryPrecostings.findIndex((p) => String(p.id) === String(existing.id) || p.precostingNo === existing.precostingNo);
@@ -611,13 +622,10 @@ export const precostingStore = {
 
   // 5. Delete from PrecostingHeader
   async delete(id) {
-    const dbStatus = getDbStatus();
-    if (dbStatus.isConnected) {
-      try {
-        await query('DELETE FROM "PrecostingHeader" WHERE id::text = $1 OR "PrecostingNo" = $1', [String(id)]);
-      } catch (err) {
-        console.error('Error deleting from PrecostingHeader:', err.message);
-      }
+    try {
+      await query('DELETE FROM "PrecostingHeader" WHERE id::text = $1 OR "PrecostingNo" = $1', [String(id)]);
+    } catch (err) {
+      console.error('Error deleting from PrecostingHeader:', err.message);
     }
 
     const index = memoryPrecostings.findIndex((p) => String(p.id) === String(id) || p.precostingNo === id);

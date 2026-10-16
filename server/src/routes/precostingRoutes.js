@@ -164,11 +164,24 @@ function validatePrecostingPayload(raw, isCreate = true) {
     }
   }
 
+  function parseNumeric(val) {
+    if (val === null || val === undefined || val === '') return null;
+    if (typeof val === 'number') return isNaN(val) ? null : val;
+    if (typeof val === 'string') {
+      const cleaned = val.replace(/,/g, '').trim();
+      if (cleaned === '') return null;
+      const num = Number(cleaned);
+      return isNaN(num) ? null : num;
+    }
+    return null;
+  }
+
   // 3. Validasi tipe data numerik
   const numericCheckList = [
     { key: 'ProdQty', alt: 'targetQty' },
     { key: 'Consume', alt: 'consm' },
     { key: 'FabricPrice', alt: 'fabricPrice' },
+    { key: 'TotalFabricPrice', alt: 'totalFabric' },
     { key: 'CMTPrice', alt: 'cmtPrice' },
     { key: 'AccPrice', alt: 'accPrice' },
     { key: 'HPP', alt: 'hpp' },
@@ -179,7 +192,7 @@ function validatePrecostingPayload(raw, isCreate = true) {
     const activeKey = raw[key] !== undefined ? key : (raw[alt] !== undefined ? alt : null);
     if (activeKey !== null) {
       const val = raw[activeKey];
-      if (val !== null && isNaN(Number(val))) {
+      if (val !== null && val !== undefined && val !== '' && parseNumeric(val) === null) {
         return {
           valid: false,
           message: `Nilai field '${activeKey}' harus berupa angka (number), diterima: ${JSON.stringify(val)}.`,

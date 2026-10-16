@@ -54,6 +54,9 @@ export const testConnection = async () => {
   }
 };
 
+// Initiate non-blocking connection check on import
+testConnection().catch(() => {});
+
 export const getDbStatus = () => ({
   client: 'postgres',
   isConnected,
@@ -61,7 +64,9 @@ export const getDbStatus = () => ({
 
 export const query = async (sql, params = []) => {
   if (pgPool) {
-    return await pgPool.query(sql, params);
+    const res = await pgPool.query(sql, params);
+    isConnected = true;
+    return res;
   }
   throw new Error('PostgreSQL database pool is not configured');
 };
