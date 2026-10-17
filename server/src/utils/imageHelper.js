@@ -19,13 +19,20 @@ export function ensureBase64Image(imageVal) {
     return trimmed;
   }
 
-  // Already a raw base64 string (JPEG, PNG, WebP signature)
-  if (
-    trimmed.startsWith('/9j/') ||
-    trimmed.startsWith('iVBORw0KGgo') ||
-    trimmed.startsWith('UklGR') ||
-    trimmed.startsWith('PHN2Zy')
-  ) {
+  // Already a raw base64 string
+  if (trimmed.startsWith('/9j/')) {
+    return `data:image/jpeg;base64,${trimmed}`;
+  }
+  if (trimmed.startsWith('iVBORw0KGgo')) {
+    return `data:image/png;base64,${trimmed}`;
+  }
+  if (trimmed.startsWith('UklGR')) {
+    return `data:image/webp;base64,${trimmed}`;
+  }
+  if (trimmed.startsWith('PHN2Zy') || trimmed.startsWith('PD94bW')) {
+    return `data:image/svg+xml;base64,${trimmed}`;
+  }
+  if (/^[A-Za-z0-9+/=]{60,}$/.test(trimmed)) {
     return `data:image/jpeg;base64,${trimmed}`;
   }
 

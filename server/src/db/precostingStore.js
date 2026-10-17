@@ -30,10 +30,15 @@ function mapDbRowToPrecosting(row) {
   const hpp = Number(row.HPP || (totalFabric + cmtPrice + accPrice));
   const taxPrice = Number(row.TaxPrice || (hpp * 0.11));
 
+  const img = row.ProdImage_base64 || row.ProductImage || '';
+
   const rawItem = {
     id,
     precostingNo,
-    image: row.ProductImage || '',
+    image: img,
+    ProductImage: img,
+    ProdImage_base64: img,
+    prodImage_base64: img,
     targetQty,
     itemName: row.ProdName || 'Style Garment',
     consm,
@@ -135,15 +140,24 @@ export function normalizePrecostingInput(payload = {}) {
     result.itemName = String(prodName).trim();
   }
 
-  // ProductImage
+  // ProductImage / ProdImage_base64
   const rawImage =
+    payload.ProdImage_base64 ??
+    payload.prodImage_base64 ??
+    payload.prod_image_base64 ??
+    payload.ProdImage ??
+    payload.prodImage ??
     payload.ProductImage ??
     payload.productImage ??
     payload.product_image ??
     payload.image ??
     null;
   if (rawImage !== null && rawImage !== undefined) {
-    result.image = ensureBase64Image(rawImage);
+    const formatted = ensureBase64Image(rawImage);
+    result.image = formatted;
+    result.ProductImage = formatted;
+    result.ProdImage_base64 = formatted;
+    result.prodImage_base64 = formatted;
   }
 
 function parseNumeric(val) {
@@ -350,7 +364,7 @@ export const precostingStore = {
     try {
       const queryText = `
         SELECT 
-          id, "ProductImage", "ProdQty", "ProdName", "Consume", "FabricPrice", 
+          id, "ProductImage", "ProdImage_base64", "ProdQty", "ProdName", "Consume", "FabricPrice", 
           "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status",
           created_at, "PrecostingNo", "Buyer", "Category", "DeliveryDate",
           "ApprovedBy", "ApprovalDate", "ApprovedDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
@@ -375,7 +389,29 @@ export const precostingStore = {
         (item.buyer && item.buyer.toLowerCase().includes(q)) ||
         (item.category && item.category.toLowerCase().includes(q));
 
-      const matchesStatus = status === 'ALL' || item.status === status;
+      let matchesStatus = true;
+      if (status && status !== 'ALL') {
+        const s = status.toLowerCase().trim();
+        const itemStatus = (item.status || '').toLowerCase().trim();
+        if (s === 'confirm' || s === 'confirmed' || s === 'approved') {
+          matchesStatus = itemStatus === 'confirmed' || itemStatus === 'approved' || itemStatus === 'confirm';
+        } else if (s === 'reject' || s === 'rejected' || s === 'revision') {
+          matchesStatus = itemStatus === 'reject' || itemStatus === 'rejected' || itemStatus === 'revision';
+        } else if (s === 'confirm,reject' || s === 'confirm-reject' || s === 'processed' || s === 'reviewed' || s === 'decided') {
+          matchesStatus = (
+            itemStatus === 'confirmed' ||
+            itemStatus === 'approved' ||
+            itemStatus === 'confirm' ||
+            itemStatus === 'reject' ||
+            itemStatus === 'rejected' ||
+            itemStatus === 'revision'
+          );
+        } else if (s === 'pending' || s === 'pending approval') {
+          matchesStatus = itemStatus === 'pending approval' || itemStatus === 'pending';
+        } else {
+          matchesStatus = itemStatus === s;
+        }
+      }
       return matchesSearch && matchesStatus;
     });
 
@@ -396,12 +432,12 @@ export const precostingStore = {
     try {
       const queryText = `
         SELECT 
-          id, "ProductImage", "ProdQty", "ProdName", "Consume", "FabricPrice", 
+          id, "ProductImage", "ProdImage_base64", "ProdQty", "ProdName", "Consume", "FabricPrice", 
           "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status",
           created_at, "PrecostingNo", "Buyer", "Category", "DeliveryDate",
           "ApprovedBy", "ApprovalDate", "ApprovedDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
         FROM "PrecostingHeader" 
-        WHERE id::text = $1 OR "PrecostingNo" = $1
+        WHERE id::text = $1 OR LOWER(TRIM("PrecostingNo")) = LOWER(TRIM($1))
         LIMIT 1
       `;
       const res = await query(queryText, [String(id)]);
@@ -414,7 +450,8 @@ export const precostingStore = {
     }
 
     const all = await this.getAll();
-    return all.find((item) => String(item.id) === String(id) || item.precostingNo === id) || null;
+    const searchId = String(id).toLowerCase().trim();
+    return all.find((item) => String(item.id).toLowerCase().trim() === searchId || (item.precostingNo && item.precostingNo.toLowerCase().trim() === searchId)) || null;
   },
 
   // 3. Create precosting into PrecostingHeader (True UPSERT by PrecostingNo)
@@ -484,17 +521,19 @@ export const precostingStore = {
     const calculated = calculatePrecostingTotals(newItem);
 
     try {
+      const imgBase64 = calculated.image ? ensureBase64Image(calculated.image) : '';
       const insertSql = `
         INSERT INTO "PrecostingHeader" (
-          "ProductImage", "ProdQty", "ProdName", "Consume", "FabricPrice", 
+          "ProductImage", "ProdImage_base64", "ProdQty", "ProdName", "Consume", "FabricPrice", 
           "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status",
           "PrecostingNo", "Buyer", "Category", "DeliveryDate", "ApprovedBy", 
           "ApprovalDate", "ApprovedDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
         RETURNING id
       `;
       const res = await query(insertSql, [
-        calculated.image ? ensureBase64Image(calculated.image) : '',
+        imgBase64,
+        imgBase64,
         calculated.targetQty || 1000,
         calculated.itemName || 'New Garment Style',
         calculated.mainFabricConsumption || 0,
@@ -592,6 +631,7 @@ export const precostingStore = {
           "Category" = $19,
           "DeliveryDate" = $20,
           "ProductImage" = COALESCE($21, "ProductImage"),
+          "ProdImage_base64" = COALESCE($21, "ProdImage_base64"),
           "PrecostingNo" = COALESCE($22, "PrecostingNo")
         WHERE id::text = $23 OR "PrecostingNo" = $23
       `;
@@ -629,6 +669,42 @@ export const precostingStore = {
       memoryPrecostings[index] = updated;
     }
     return updated;
+  },
+
+  // 4b. Update Image Base64 only (Lightweight & Fast dedicated endpoint)
+  async updateImage(precostingNoOrId, rawImage) {
+    const existing = await this.getById(precostingNoOrId);
+    if (!existing) return null;
+
+    const formatted = ensureBase64Image(rawImage);
+
+    try {
+      const updateSql = `
+        UPDATE "PrecostingHeader" SET
+          "ProductImage" = $1,
+          "ProdImage_base64" = $1,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id::text = $2 OR LOWER(TRIM("PrecostingNo")) = LOWER(TRIM($2))
+      `;
+      await query(updateSql, [formatted, String(precostingNoOrId)]);
+    } catch (err) {
+      console.error('Error updating image in PostgreSQL:', err.message);
+    }
+
+    existing.image = formatted;
+    existing.ProductImage = formatted;
+    existing.ProdImage_base64 = formatted;
+    existing.prodImage_base64 = formatted;
+
+    const targetKey = String(precostingNoOrId).toLowerCase().trim();
+    const index = memoryPrecostings.findIndex(
+      (p) => String(p.id).toLowerCase().trim() === targetKey || (p.precostingNo && p.precostingNo.toLowerCase().trim() === targetKey)
+    );
+    if (index !== -1) {
+      memoryPrecostings[index] = { ...memoryPrecostings[index], ...existing };
+    }
+
+    return existing;
   },
 
   // 5. Delete from PrecostingHeader
@@ -751,6 +827,111 @@ export const precostingStore = {
       totalTargetQty,
       totalProductionValue,
     };
+  },
+
+  // 10b. Get precostings by processed status (default 'confirm,reject', or specific status like 'confirm', 'reject')
+  async getProcessed(status) {
+    if (!status || String(status).trim() === '') {
+      return await this.getAll({ status: 'confirm,reject' });
+    }
+    return await this.getAll({ status: String(status).trim() });
+  },
+
+  // 10c. Get lightweight status summary (only PrecostingNo, status, remarks) without affecting getAll
+  async getStatusSummary({ status = 'confirm,reject', search = '', sortBy = 'date-desc' } = {}) {
+    let rows = [];
+    try {
+      const queryText = `
+        SELECT id, "PrecostingNo", "Status", "ApprovalNotes", "Remarks", created_at
+        FROM "PrecostingHeader"
+        ORDER BY id DESC
+      `;
+      const res = await query(queryText);
+      rows = res.rows || res;
+    } catch (err) {
+      console.warn('Querying status summary from PostgreSQL fallback to memory:', err.message);
+      rows = memoryPrecostings.map((m) => ({
+        id: m.id,
+        PrecostingNo: m.precostingNo || m.PrecostingNo || '',
+        Status: m.status || m.Status || 'Pending Approval',
+        ApprovalNotes: m.approvalNotes || m.ApprovalNotes || '',
+        Remarks: m.remarks || m.Remarks || [],
+        created_at: m.createdDate,
+      }));
+    }
+
+    const extractRemarkText = (approvalNotes, rawRemarks) => {
+      if (approvalNotes && typeof approvalNotes === 'string' && approvalNotes.trim() !== '') {
+        return approvalNotes.trim();
+      }
+      let remarksArr = [];
+      if (Array.isArray(rawRemarks)) {
+        remarksArr = rawRemarks;
+      } else if (typeof rawRemarks === 'string') {
+        try {
+          remarksArr = JSON.parse(rawRemarks);
+        } catch {
+          return rawRemarks.trim();
+        }
+      }
+      if (Array.isArray(remarksArr) && remarksArr.length > 0) {
+        const first = remarksArr[0];
+        if (typeof first === 'string') return first.trim();
+        if (first && typeof first.text === 'string') {
+          return first.text.replace(/^\[(REJECT|APPROVAL NOTES)\]:\s*/i, '').trim();
+        }
+      }
+      return '';
+    };
+
+    const targetStatus = (status || '').toLowerCase().trim();
+
+    const filtered = rows.filter((row) => {
+      const pNo = (row.PrecostingNo || '').trim();
+      const itemStatus = (row.Status || '').toLowerCase().trim();
+
+      // Search filter
+      const q = (search || '').toLowerCase().trim();
+      if (q && !pNo.toLowerCase().includes(q)) {
+        return false;
+      }
+
+      // Status filter
+      if (!targetStatus || targetStatus === 'confirm,reject' || targetStatus === 'confirm-reject' || targetStatus === 'processed' || targetStatus === 'both') {
+        return (
+          itemStatus === 'confirmed' ||
+          itemStatus === 'approved' ||
+          itemStatus === 'confirm' ||
+          itemStatus === 'reject' ||
+          itemStatus === 'rejected' ||
+          itemStatus === 'revision'
+        );
+      }
+      if (targetStatus === 'confirm' || targetStatus === 'confirmed' || targetStatus === 'approved') {
+        return itemStatus === 'confirmed' || itemStatus === 'approved' || itemStatus === 'confirm';
+      }
+      if (targetStatus === 'reject' || targetStatus === 'rejected' || targetStatus === 'revision') {
+        return itemStatus === 'reject' || itemStatus === 'rejected' || itemStatus === 'revision';
+      }
+      if (targetStatus === 'pending' || targetStatus === 'pending approval') {
+        return itemStatus === 'pending approval' || itemStatus === 'pending';
+      }
+      if (targetStatus === 'all' || targetStatus === 'semua') {
+        return true;
+      }
+      return itemStatus === targetStatus;
+    });
+
+    return filtered.map((row) => ({
+      PrecostingNo: row.PrecostingNo || (row.id ? `PC-${String(row.id).padStart(4, '0')}` : ''),
+      status: row.Status || 'Pending Approval',
+      remarks: extractRemarkText(row.ApprovalNotes, row.Remarks),
+    }));
+  },
+
+  // Alias
+  async getStatusOnly(params) {
+    return await this.getStatusSummary(params);
   },
 
   // 11. Users

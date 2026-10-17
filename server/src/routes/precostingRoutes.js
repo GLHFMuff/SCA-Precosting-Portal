@@ -43,7 +43,7 @@ router.get('/header-mapping', (req, res) => {
     description: 'Pemetaan kolom tabel database "PrecostingHeader" (PostgreSQL) ke kolom Grid UI Dashboard',
     mapping: [
       { gridIndex: 1, gridColumn: 'Nomor Precosting', dbColumn: 'PrecostingNo / id', type: 'VARCHAR(50) / BIGINT', description: 'Nomor Precosting (misal PC-2026-001) atau ID record' },
-      { gridIndex: 2, gridColumn: 'Image', dbColumn: 'ProductImage', type: 'TEXT', description: 'URL / path / gambar produk model pakaian' },
+      { gridIndex: 2, gridColumn: 'Image', dbColumn: 'ProductImage / ProdImage_base64', type: 'TEXT', description: 'URL / path / gambar produk model pakaian (Base64 string)' },
       { gridIndex: 3, gridColumn: 'Qty Produksi', dbColumn: 'ProdQty', type: 'REAL', description: 'Target kuantitas pesanan produksi pakaian (Pcs)' },
       { gridIndex: 4, gridColumn: 'Nama Style', dbColumn: 'ProdName', type: 'VARCHAR(255)', description: 'Nama item / style pakaian' },
       { gridIndex: 5, gridColumn: 'Consm', dbColumn: 'Consume', type: 'REAL', description: 'Konsumsi pemakaian bahan kain utama per pcs (misal 1.85)' },
@@ -57,6 +57,88 @@ router.get('/header-mapping', (req, res) => {
     ],
   });
 });
+
+// Handler Query Precosting Berdasarkan Status (Mendukung HTTP POST & GET)
+// Memungkinkan aplikasi utama yang menggunakan C# HttpWebRequest (Method = "POST") mengambil data dengan filter status.
+// Logika parameter 'status' (bisa di JSON body atau query string URL):
+// - Jika status kosong ("" / null / undefined / whitespace): otomatis mengambil status 'confirm' DAN 'reject' (tanpa pending/draft)
+// - Jika diisi "reject" (atau "rejected", "revision"): mengambil hanya yang status reject
+// - Jika diisi "confirm" (atau "confirmed", "approved"): mengambil hanya yang status confirm
+// - Jika diisi "all" / "ALL": mengambil seluruh data precosting
+export const handleQueryPrecostingsByStatus = async (req, res) => {
+  try {
+    const raw = req.body || {};
+    const rawStatus = raw.status ?? raw.Status ?? req.query?.status;
+
+    let effectiveStatus;
+    if (rawStatus === undefined || rawStatus === null || String(rawStatus).trim() === '') {
+      // Sesuai requirement: jika kosong, ambil yang reject dan confirm
+      effectiveStatus = 'confirm,reject';
+    } else {
+      const s = String(rawStatus).trim();
+      const lower = s.toLowerCase();
+      if (lower === 'confirm,reject' || lower === 'confirm-reject' || lower === 'processed' || lower === 'both') {
+        effectiveStatus = 'confirm,reject';
+      } else if (lower === 'all' || lower === 'semua') {
+        effectiveStatus = 'ALL';
+      } else {
+        effectiveStatus = s;
+      }
+    }
+
+    const search = raw.search ?? raw.Search ?? req.query?.search ?? '';
+    const sortBy = raw.sortBy ?? raw.SortBy ?? req.query?.sortBy ?? 'date-desc';
+
+    const items = await precostingStore.getStatusSummary({
+      status: effectiveStatus,
+      search,
+      sortBy,
+    });
+
+    const isBoth = effectiveStatus === 'confirm,reject';
+    const desc = isBoth
+      ? 'Daftar Precosting yang sudah diproses (status: confirm & reject)'
+      : `Daftar Precosting dengan filter status: ${effectiveStatus}`;
+
+    res.json({
+      success: true,
+      status: '1',
+      description: desc,
+      filter: {
+        status: rawStatus ?? '',
+        effectiveStatus,
+      },
+      count: items.length,
+      data: items,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      status: '0',
+      error_list: error.message,
+      message: error.message,
+    });
+  }
+};
+
+// Route status Precosting (Mendukung GET dan POST untuk integrasi C# .NET)
+router.get('/confirm-reject', handleQueryPrecostingsByStatus);
+router.post('/confirm-reject', handleQueryPrecostingsByStatus);
+
+router.get('/confirm-or-reject', handleQueryPrecostingsByStatus);
+router.post('/confirm-or-reject', handleQueryPrecostingsByStatus);
+
+router.get('/processed', handleQueryPrecostingsByStatus);
+router.post('/processed', handleQueryPrecostingsByStatus);
+
+router.get('/reviewed', handleQueryPrecostingsByStatus);
+router.post('/reviewed', handleQueryPrecostingsByStatus);
+
+router.get('/query', handleQueryPrecostingsByStatus);
+router.post('/query', handleQueryPrecostingsByStatus);
+
+router.get('/list', handleQueryPrecostingsByStatus);
+router.post('/list', handleQueryPrecostingsByStatus);
 
 // GET /api/precostings/:id - Get one precosting detail
 router.get('/:id', async (req, res) => {
@@ -85,6 +167,7 @@ const ALLOWED_PRECOSTING_FIELDS = new Set([
   'HPP',
   'TaxPrice',
   'ProductImage',
+  'ProdImage_base64',
   'Buyer',
   'Category',
   'DeliveryDate',
@@ -127,6 +210,11 @@ const ALLOWED_PRECOSTING_FIELDS = new Set([
   'image',
   'productImage',
   'product_image',
+  'prodImage_base64',
+  'prod_image_base64',
+  'ProdImage',
+  'prodImage',
+  'prod_image',
   'buyer',
   'category',
   'deliveryDate',
@@ -145,6 +233,11 @@ const ALLOWED_PRECOSTING_FIELDS = new Set([
   'services',
   'remarks',
   'id',
+  'action',
+  'search',
+  'Search',
+  'sortBy',
+  'SortBy',
 ]);
 
 function validatePrecostingPayload(raw, isCreate = true) {
@@ -161,7 +254,7 @@ function validatePrecostingPayload(raw, isCreate = true) {
       invalidFields: unknownFields,
       standardFields: [
         'PrecostingNo', 'ProdName', 'ProdQty', 'Consume', 'FabricPrice',
-        'CMTPrice', 'AccPrice', 'ProductImage', 'Buyer', 'Category',
+        'CMTPrice', 'AccPrice', 'ProductImage', 'ProdImage_base64', 'Buyer', 'Category',
         'DeliveryDate', 'Status', 'Fabrics', 'Accessories', 'Services', 'Remarks'
       ],
     };
@@ -227,10 +320,32 @@ function validatePrecostingPayload(raw, isCreate = true) {
   return { valid: true };
 }
 
-// POST /api/precostings - Create / True UPSERT precosting
+// POST /api/precostings - Create / True UPSERT precosting ATAU Query Status jika payload berupa query
 router.post('/', async (req, res) => {
   try {
     const raw = req.body || {};
+
+    const hasPrecostingNo = Boolean(
+      (raw.PrecostingNo && String(raw.PrecostingNo).trim()) ||
+      (raw.precostingNo && String(raw.precostingNo).trim()) ||
+      (raw.precosting_no && String(raw.precosting_no).trim())
+    );
+    const hasProdName = Boolean(
+      (raw.ProdName && String(raw.ProdName).trim()) ||
+      (raw.itemName && String(raw.itemName).trim()) ||
+      (raw.prodName && String(raw.prodName).trim())
+    );
+
+    // Jika request POST tidak memiliki PrecostingNo dan ProdName,
+    // tetapi mengirim parameter status (misal { "status": "" } atau { "status": "reject" }),
+    // maka tangani sebagai query data agar pemanggil dari aplikasi utama C# tetap lancar menggunakan POST ke root endpoint
+    const isStatusQuery =
+      (raw.status !== undefined || raw.Status !== undefined) &&
+      (!hasPrecostingNo && !hasProdName);
+
+    if (isStatusQuery || raw.action === 'query' || raw.action === 'list') {
+      return handleQueryPrecostingsByStatus(req, res);
+    }
 
     const validation = validatePrecostingPayload(raw, true);
     if (!validation.valid) {
@@ -261,6 +376,83 @@ router.post('/', async (req, res) => {
     });
   }
 });
+
+// Dedicated Image Update Handler (Supports both URL param /:id/image and body PrecostingNo)
+async function handleUpdateImage(req, res) {
+  try {
+    const raw = req.body || {};
+    const precostingNo =
+      req.params.id ||
+      raw.PrecostingNo ||
+      raw.precostingNo ||
+      raw.precosting_no ||
+      raw.id;
+
+    if (!precostingNo || typeof precostingNo !== 'string' || !precostingNo.trim()) {
+      return res.status(400).json({
+        success: false,
+        status: '0',
+        message: "Nomor Precosting ('PrecostingNo') wajib disertakan pada URL atau di dalam JSON body request.",
+      });
+    }
+
+    const imageVal =
+      raw.ProdImage_base64 ??
+      raw.prodImage_base64 ??
+      raw.ProductImage ??
+      raw.productImage ??
+      raw.product_image ??
+      raw.image ??
+      raw.imageBase64 ??
+      raw.image_base64 ??
+      null;
+
+    if (!imageVal || typeof imageVal !== 'string' || !imageVal.trim()) {
+      return res.status(400).json({
+        success: false,
+        status: '0',
+        message: "Field gambar Base64 ('ProdImage_base64' atau 'ProductImage') wajib disertakan dan berupa string Base64 yang valid.",
+      });
+    }
+
+    const updated = await precostingStore.updateImage(precostingNo.trim(), imageVal.trim());
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        status: '0',
+        message: `Precosting dengan nomor '${precostingNo}' tidak ditemukan di database.`,
+      });
+    }
+
+    res.json({
+      success: true,
+      status: '1',
+      message: `Gambar Base64 untuk Precosting ${updated.precostingNo} berhasil diperbarui.`,
+      data: {
+        id: updated.id,
+        precostingNo: updated.precostingNo,
+        prodName: updated.itemName,
+        hasImage: Boolean(updated.image),
+        imageLength: updated.image ? updated.image.length : 0,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      status: '0',
+      error_list: error.message,
+      message: error.message,
+    });
+  }
+}
+
+// POST & PUT /api/precostings/update-image (PrecostingNo in body)
+router.post('/update-image', handleUpdateImage);
+router.put('/update-image', handleUpdateImage);
+
+// POST & PUT /api/precostings/:id/image (PrecostingNo in URL path)
+router.post('/:id/image', handleUpdateImage);
+router.put('/:id/image', handleUpdateImage);
 
 // PUT /api/precostings/:id - Update precosting
 router.put('/:id', async (req, res) => {

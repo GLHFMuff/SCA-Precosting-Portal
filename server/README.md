@@ -94,17 +94,20 @@ npm run db:seed   # Memasukkan data awal (users, 6 model precosting, kain, acc, 
 |---|---|---|
 | `GET` | `/api/health` | Status server & koneksi database |
 | `GET` | `/api/precostings` | Ambil semua data precosting (support `?search=`, `?status=`, `?sortBy=`) |
+| `GET` | `/api/precostings/confirm-reject` | **Ambil semua data status Confirm & Reject sekaligus** (tanpa lempar parameter) |
 | `GET` | `/api/precostings/:id` | Detail lengkap satu precosting (fabric, acc, jasa, remarks) |
-| `POST` | `/api/precostings` | Tambah precosting baru |
+| `POST` | `/api/precostings` | Tambah precosting baru (True UPSERT) |
+| `POST` / `PUT` | `/api/precostings/update-image` | **Update Gambar Base64 saja** (`PrecostingNo` & `ProdImage_base64` di body) |
+| `POST` / `PUT` | `/api/precostings/:id/image` | **Update Gambar Base64 saja** (`:id` di URL, `ProdImage_base64` di body) |
 | `PUT` | `/api/precostings/:id` | Update data precosting |
 | `DELETE` | `/api/precostings/:id` | Hapus data precosting |
 | `POST` | `/api/precostings/:id/approve` | Otorisasi / Setujui Precosting |
-| `POST` | `/api/precostings/:id/reject` | Tolak / Minta Revisi Precosting |
+| `POST` / `PUT` | `/api/precostings/:id/reject` | Tolak / Minta Revisi Precosting |
 | `POST` | `/api/precostings/:id/remarks` | Tambah catatan/remarks |
 | `GET` | `/api/dashboard/stats` | Ringkasan KPI Dashboard (Qty, Total HPP, Status) |
 | `POST` | `/api/auth/login` | Login user |
 | `GET` | `/api/auth/users` | Daftar akun pengguna default |
-| `POST` | `/api/upload/image` | Upload gambar garmen pakaian |
+| `POST` | `/api/upload/image` | Upload file gambar garmen (FormData multipart) |
 
 ---
 
@@ -135,7 +138,7 @@ API `POST /api/precostings` telah menggunakan **skema validasi ketat (strict & f
 | `TotalFabricPrice`| `totalFabric` | Number | Opsional | Total biaya kain (`Consume * FabricPrice`). Otomatis dihitung jika tidak dikirim. |
 | `CMTPrice` | `cmtPrice` | Number | Opsional | Total biaya jasa CMT (Cutting, Making, Trimming) per pcs (misal `28000`). Default: `0`. |
 | `AccPrice` | `accPrice` | Number | Opsional | Total biaya aksesoris, trims, label & polybag per pcs (misal `6000`). Default: `0`. |
-| `ProductImage` | `image` | String | Opsional | Gambar model pakaian dalam format Base64 string murni (`data:image/jpeg;base64,...`). |
+| `ProductImage` / `ProdImage_base64` | `image` / `prodImage_base64` | String | Opsional | Gambar model pakaian dalam format Base64 string murni (`data:image/jpeg;base64,...` atau raw base64). |
 | `Buyer` | `buyer` | String | Opsional | Nama buyer / pemesan (misal `"Global Buyer"` atau `"Uniqlo"`). Default: `"Global Buyer"`. |
 | `Category` | `category` | String | Opsional | Kategori garmen (misal `"Garment"`, `"Kemeja"`, `"Celana"`). Default: `"Garment"`. |
 | `DeliveryDate` | `deliveryDate` | String | Opsional | Target tanggal pengiriman (format `"YYYY-MM-DD"`, misal `"2026-11-20"`). |
@@ -155,7 +158,7 @@ API `POST /api/precostings` telah menggunakan **skema validasi ketat (strict & f
 
 ### 💡 Contoh Request JSON
 
-#### 1. Format Standar (Flat Costing - Paling Umum untuk Integrasi Sistem Eksternal)
+#### 1. Format Standar (Flat Costing dengan ProdImage_base64)
 ```json
 {
   "PrecostingNo": "CBD-2610-00005",
@@ -165,7 +168,7 @@ API `POST /api/precostings` telah menggunakan **skema validasi ketat (strict & f
   "FabricPrice": 48000,
   "CMTPrice": 28000,
   "AccPrice": 6000,
-  "ProductImage": "data:image/jpeg;base64,/9j/4AAQSkZJRg...",
+  "ProdImage_base64": "/9j/4AAQSkZJRg...",
   "Buyer": "Uniqlo Indonesia",
   "Category": "Kemeja",
   "DeliveryDate": "2026-11-20",
@@ -365,3 +368,156 @@ const response = await fetch('http://localhost:5000/api/precostings', {
 const result = await response.json();
 console.log(result);
 ```
+
+---
+
+## 🖼️ Endpoint Khusus: Update Gambar Base64 (`ProdImage_base64`)
+
+Untuk memperbarui foto model pakaian secara terpisah tanpa harus mengirimkan ulang data kain, aksesoris, dan harga, Anda dapat menggunakan endpoint khusus ini.
+
+### 1. Opsi A: `POST` / `PUT` `/api/precostings/update-image`
+Nomor precosting disertakan langsung di dalam body JSON.
+
+#### URL Endpoint:
+`http://localhost:5001/api/precostings/update-image`
+
+#### Format Payload:
+```json
+{
+  "PrecostingNo": "CBD-2610-00001",
+  "ProdImage_base64": "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/..."
+}
+```
+
+*Alias field nomor yang didukung:* `PrecostingNo`, `precostingNo`, `id`  
+*Alias field gambar yang didukung:* `ProdImage_base64`, `prodImage_base64`, `ProductImage`, `image`
+
+---
+
+### 2. Opsi B: `POST` / `PUT` `/api/precostings/:id/image`
+Nomor precosting diletakkan pada URL path parameter (`:id` diisi `PrecostingNo`).
+
+#### URL Endpoint:
+`http://localhost:5001/api/precostings/CBD-2610-00001/image`
+
+#### Format Payload:
+```json
+{
+  "ProdImage_base64": "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/..."
+}
+```
+
+---
+
+### 📤 Respon Sukses (HTTP 200 OK):
+```json
+{
+  "success": true,
+  "status": "1",
+  "message": "Gambar Base64 untuk Precosting CBD-2610-00001 berhasil diperbarui.",
+  "data": {
+    "id": "1",
+    "precostingNo": "CBD-2610-00001",
+    "prodName": "TN NURA LS",
+    "hasImage": true,
+    "imageLength": 18240
+  }
+}
+```
+
+---
+
+## 📋 Endpoint Ambil Precosting Berdasarkan Status (Mendukung HTTP POST & GET)
+
+Disediakan khusus untuk integrasi dengan aplikasi utama (C# .NET) yang menggunakan `HttpWebRequest` dengan metode **`POST`** (`ShootAPIWithToken`).
+
+### URL Endpoint:
+- **`POST http://localhost:5001/api/precostings/confirm-reject`**
+- *Atau bisa juga dipanggil ke root:* `POST http://localhost:5001/api/precostings/`
+- *Alias URL lainnya yang didukung:* `/api/precostings/processed`, `/api/precostings/query`, `/api/precostings/list`
+
+---
+
+### 📥 Format Payload JSON (Body Request):
+
+#### 1. Mengambil Sekaligus Status `confirm` DAN `reject` (Status Kosong):
+Jika field `status` dikosongkan (`""`, `null`, atau tidak disertakan `{}`), API secara otomatis mengambil data yang statusnya **`confirm`** (confirmed / approved) dan **`reject`** (reject / revision), tanpa mengikutsertakan Draft atau Pending Approval.
+```json
+{
+  "status": ""
+}
+```
+*(Atau payload kosong `{}`)*
+
+#### 2. Hanya Mengambil Status `reject`:
+```json
+{
+  "status": "reject"
+}
+```
+
+#### 3. Hanya Mengambil Status `confirm`:
+```json
+{
+  "status": "confirm"
+}
+```
+
+#### 4. Opsional: Pencarian & Pengurutan Tambahan:
+```json
+{
+  "status": "",
+  "search": "TN NURA",
+  "sortBy": "date-desc"
+}
+```
+
+---
+
+### 📤 Contoh Respon Sukses (HTTP 200 OK):
+Setiap item di dalam array `data` khusus endpoint ini hanya mengembalikan 3 field utama: **`PrecostingNo`**, **`status`**, dan **`remarks`** sehingga sangat ringan dan hemat bandwidth:
+
+```json
+{
+  "success": true,
+  "status": "1",
+  "description": "Daftar Precosting yang sudah diproses (status: confirm & reject)",
+  "filter": {
+    "status": "",
+    "effectiveStatus": "confirm,reject"
+  },
+  "count": 2,
+  "data": [
+    {
+      "PrecostingNo": "CBD-2610-00001",
+      "status": "confirmed",
+      "remarks": "Approved for production"
+    },
+    {
+      "PrecostingNo": "CBD-2610-00005",
+      "status": "reject",
+      "remarks": "Harga kain melebihi budget target"
+    }
+  ]
+}
+```
+
+---
+
+### 💻 Contoh Pemanggilan dari C# (.NET):
+```csharp
+// Contoh 1: Ambil semua yang status reject & confirm
+string requestPayload = "{\"status\": \"\"}";
+string endpoint = "http://localhost:5001/api/precostings/confirm-reject";
+string responseJson = ShootAPIWithToken(requestPayload, endpoint, token);
+
+// Contoh 2: Ambil hanya yang status reject
+string rejectPayload = "{\"status\": \"reject\"}";
+string rejectJson = ShootAPIWithToken(rejectPayload, endpoint, token);
+
+// Contoh 3: Ambil hanya yang status confirm
+string confirmPayload = "{\"status\": \"confirm\"}";
+string confirmJson = ShootAPIWithToken(confirmPayload, endpoint, token);
+```
+
+
