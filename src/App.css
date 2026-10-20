@@ -501,17 +501,64 @@
   gap: 0.45rem;
 }
 
+.login-alert-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.75rem 0.9rem;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #991b1b;
+  font-size: 0.825rem;
+  line-height: 1.35;
+  margin-bottom: 0.85rem;
+}
+
+.login-alert-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: #dc2626;
+}
+
+.login-alert-content {
+  flex: 1;
+}
+
+.login-db-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+  padding: 0.25rem 0.65rem;
+  background-color: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #065f46;
+}
+
+.login-db-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+}
+
 .simple-demo-pill {
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.5rem 0.75rem;
+  padding: 0.6rem 0.8rem;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s ease;
+  text-align: left;
 }
 
 .simple-demo-pill:hover {
@@ -525,17 +572,83 @@
   box-shadow: 0 0 0 1px #3b82f6;
 }
 
-.pill-username {
-  font-weight: 700;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  color: #0f172a;
+.pill-left {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
 }
 
-.pill-role {
+.pill-avatar-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pill-avatar-icon.is-direktur,
+.pill-avatar-icon.is-management {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.pill-avatar-icon.is-developer {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.pill-text-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.pill-person-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.pill-person-role {
   font-size: 0.72rem;
   color: #64748b;
-  font-weight: 500;
+  margin-top: 1px;
+}
+
+.pill-badge-tag {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  color: #334155;
+  flex-shrink: 0;
+}
+
+.simple-demo-pill.is-active .pill-badge-tag {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1e40af;
+}
+
+.btn-simple-submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.spin-animation {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .simple-login-footer {

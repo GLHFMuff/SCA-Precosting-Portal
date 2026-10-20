@@ -53,10 +53,119 @@ router.get('/header-mapping', (req, res) => {
       { gridIndex: 9, gridColumn: 'Harga Accesories', dbColumn: 'AccPrice', type: 'REAL', description: 'Total biaya aksesoris & trims per pcs' },
       { gridIndex: 10, gridColumn: 'HPP', dbColumn: 'HPP', type: 'REAL', description: 'Harga Pokok Produksi per pcs' },
       { gridIndex: 11, gridColumn: 'PPN', dbColumn: 'TaxPrice', type: 'REAL', description: 'Pajak Pertambahan Nilai 11% (HPP * 11%)' },
-      { gridIndex: 12, gridColumn: 'Action', dbColumn: 'Status', type: 'VARCHAR(50)', description: 'Status (Pending Approval, Approved, Revision, Draft) dan tombol aksi (Detail, Approve, Not Approve)' },
+      { gridIndex: 12, gridColumn: 'Status Sinkronisasi', dbColumn: 'sync_status', type: 'VARCHAR(50)', description: 'Status sinkronisasi integrasi eksternal (pending / synched)' },
+      { gridIndex: 13, gridColumn: 'Action', dbColumn: 'Status', type: 'VARCHAR(50)', description: 'Status (Pending, Confirmed, Rejected, Draft) dan tombol aksi (Detail, Approve, Not Approve)' },
     ],
   });
 });
+
+// Helper to extract precosting_no from various payload structures:
+// - { precosting_no: "PC-001" }
+// - { precosting_no: ["PC-001", "PC-002"] }
+// - { PrecostingNo: ["PC-001", "PC-002"] }
+// - ["PC-001", "PC-002"]
+// - [{ precosting_no: "PC-001" }, { precosting_no: "PC-002" }]
+// - { precostings: [...] } or { items: [...] }
+export function extractPrecostingNumbers(body) {
+  if (!body) return [];
+  const numbers = [];
+
+  const addVal = (val) => {
+    if (val === null || val === undefined) return;
+    if (typeof val === 'string') {
+      if (val.includes(',')) {
+        val.split(',').forEach((s) => {
+          const trimmed = s.trim();
+          if (trimmed) numbers.push(trimmed);
+        });
+      } else {
+        const trimmed = val.trim();
+        if (trimmed) numbers.push(trimmed);
+      }
+    } else if (typeof val === 'number') {
+      numbers.push(String(val).trim());
+    } else if (typeof val === 'object') {
+      const pNo =
+        val.precosting_no ??
+        val.PrecostingNo ??
+        val.precostingNo ??
+        val.id;
+      if (pNo) addVal(pNo);
+    }
+  };
+
+  if (Array.isArray(body)) {
+    body.forEach(addVal);
+  } else if (typeof body === 'object') {
+    const candidate =
+      body.precosting_no ??
+      body.PrecostingNo ??
+      body.precostingNo ??
+      body.precosting_nos ??
+      body.precostingNos ??
+      body.PrecostingNos ??
+      body.items ??
+      body.data ??
+      body.precostings;
+
+    if (candidate !== undefined && candidate !== null) {
+      if (Array.isArray(candidate)) {
+        candidate.forEach(addVal);
+      } else {
+        addVal(candidate);
+      }
+    } else if (body.id) {
+      addVal(body.id);
+    }
+  }
+
+  return [...new Set(numbers)];
+}
+
+// Handler POST untuk update sync_status menjadi "synched" (bisa 1 atau banyak sekaligus)
+export const handleUpdateSyncStatus = async (req, res) => {
+  try {
+    const raw = req.body;
+    const precostingNos = extractPrecostingNumbers(raw);
+
+    if (!precostingNos || precostingNos.length === 0) {
+      return res.status(400).json({
+        success: false,
+        status: '0',
+        error_list: "Payload 'precosting_no' wajib disertakan dan tidak boleh kosong.",
+        message: "Payload 'precosting_no' wajib disertakan (string atau array string) dan tidak boleh kosong. Contoh: { \"precosting_no\": [\"CBD-2610-00001\", \"CBD-2610-00002\"] } atau { \"precosting_no\": \"CBD-2610-00001\" }.",
+      });
+    }
+
+    const targetStatus = (
+      raw?.sync_status ??
+      raw?.syncStatus ??
+      raw?.SyncStatus ??
+      'synched'
+    ).trim();
+
+    const result = await precostingStore.updateSyncStatus(precostingNos, targetStatus);
+
+    res.json({
+      success: true,
+      status: '1',
+      error_list: '',
+      message: `Berhasil memperbarui sync_status menjadi '${targetStatus}' untuk ${result.total_updated} data precosting`,
+      sync_status: targetStatus,
+      total_requested: result.total_requested,
+      total_updated: result.total_updated,
+      updated: result.updated,
+      not_found: result.not_found,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      status: '0',
+      error_list: error.message,
+      message: error.message,
+    });
+  }
+};
 
 // Handler Query Precosting Berdasarkan Status (Mendukung HTTP POST & GET)
 // Memungkinkan aplikasi utama yang menggunakan C# HttpWebRequest (Method = "POST") mengambil data dengan filter status.
@@ -65,10 +174,12 @@ router.get('/header-mapping', (req, res) => {
 // - Jika diisi "reject" (atau "rejected", "revision"): mengambil hanya yang status reject
 // - Jika diisi "confirm" (atau "confirmed", "approved"): mengambil hanya yang status confirm
 // - Jika diisi "all" / "ALL": mengambil seluruh data precosting
+// - Parameter 'sync_status': default adalah 'pending' (hanya data dengan sync_status = 'pending' yang diambil)
 export const handleQueryPrecostingsByStatus = async (req, res) => {
   try {
     const raw = req.body || {};
     const rawStatus = raw.status ?? raw.Status ?? req.query?.status;
+    const syncStatusFilter = raw.sync_status ?? raw.syncStatus ?? raw.SyncStatus ?? req.query?.sync_status ?? 'pending';
 
     let effectiveStatus;
     if (rawStatus === undefined || rawStatus === null || String(rawStatus).trim() === '') {
@@ -93,12 +204,13 @@ export const handleQueryPrecostingsByStatus = async (req, res) => {
       status: effectiveStatus,
       search,
       sortBy,
+      sync_status: syncStatusFilter,
     });
 
     const isBoth = effectiveStatus === 'confirm,reject';
     const desc = isBoth
-      ? 'Daftar Precosting yang sudah diproses (status: confirm & reject)'
-      : `Daftar Precosting dengan filter status: ${effectiveStatus}`;
+      ? 'Daftar Precosting yang sudah diproses (status: confirm & reject) dengan sync_status: ' + syncStatusFilter
+      : `Daftar Precosting dengan filter status: ${effectiveStatus} dan sync_status: ${syncStatusFilter}`;
 
     res.json({
       success: true,
@@ -107,6 +219,7 @@ export const handleQueryPrecostingsByStatus = async (req, res) => {
       filter: {
         status: rawStatus ?? '',
         effectiveStatus,
+        sync_status: syncStatusFilter,
       },
       count: items.length,
       data: items,
@@ -139,6 +252,13 @@ router.post('/query', handleQueryPrecostingsByStatus);
 
 router.get('/list', handleQueryPrecostingsByStatus);
 router.post('/list', handleQueryPrecostingsByStatus);
+
+// Route update sync_status menjadi "synched" (bisa 1 atau lebih PrecostingNo sekaligus)
+router.post('/sync-status', handleUpdateSyncStatus);
+router.put('/sync-status', handleUpdateSyncStatus);
+router.post('/update-sync-status', handleUpdateSyncStatus);
+router.post('/synched', handleUpdateSyncStatus);
+router.post('/sync', handleUpdateSyncStatus);
 
 // GET /api/precostings/:id - Get one precosting detail
 router.get('/:id', async (req, res) => {
@@ -238,6 +358,14 @@ const ALLOWED_PRECOSTING_FIELDS = new Set([
   'Search',
   'sortBy',
   'SortBy',
+  'sync_status',
+  'syncStatus',
+  'SyncStatus',
+  'precosting_nos',
+  'precostingNos',
+  'PrecostingNos',
+  'items',
+  'data',
 ]);
 
 function validatePrecostingPayload(raw, isCreate = true) {
@@ -255,7 +383,7 @@ function validatePrecostingPayload(raw, isCreate = true) {
       standardFields: [
         'PrecostingNo', 'ProdName', 'ProdQty', 'Consume', 'FabricPrice',
         'CMTPrice', 'AccPrice', 'ProductImage', 'ProdImage_base64', 'Buyer', 'Category',
-        'DeliveryDate', 'Status', 'Fabrics', 'Accessories', 'Services', 'Remarks'
+        'DeliveryDate', 'Status', 'sync_status', 'Fabrics', 'Accessories', 'Services', 'Remarks'
       ],
     };
   }
@@ -335,6 +463,18 @@ router.post('/', async (req, res) => {
       (raw.itemName && String(raw.itemName).trim()) ||
       (raw.prodName && String(raw.prodName).trim())
     );
+
+    // Cek jika request POST ditujukan untuk update sync_status
+    const isSyncUpdate =
+      raw.action === 'sync' ||
+      raw.action === 'synched' ||
+      raw.action === 'update_sync' ||
+      raw.action === 'update-sync' ||
+      ((raw.sync_status === 'synched' || raw.syncStatus === 'synched' || raw.SyncStatus === 'synched') && !hasProdName);
+
+    if (isSyncUpdate) {
+      return handleUpdateSyncStatus(req, res);
+    }
 
     // Jika request POST tidak memiliki PrecostingNo dan ProdName,
     // tetapi mengirim parameter status (misal { "status": "" } atau { "status": "reject" }),
@@ -511,7 +651,7 @@ router.post('/:id/approve', async (req, res) => {
 
     res.json({
       success: true,
-      message: `Precosting ${updated.precostingNo} berhasil dikonfirmasi (confirmed)`,
+      message: `Precosting ${updated.precostingNo} berhasil dikonfirmasi (Confirmed)`,
       data: updated,
     });
   } catch (error) {
@@ -524,9 +664,9 @@ router.post('/:id/reject', async (req, res) => {
   try {
     const { reviewerName, notes } = req.body;
     if (!notes || !notes.trim()) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Catatan / remarks alasan penolakan wajib diisi untuk melakukan reject.' 
+      return res.status(400).json({
+        success: false,
+        message: 'Catatan / remarks alasan penolakan wajib diisi untuk melakukan reject.'
       });
     }
 
@@ -541,7 +681,7 @@ router.post('/:id/reject', async (req, res) => {
 
     res.json({
       success: true,
-      message: `Status Precosting ${updated.precostingNo} berhasil diubah menjadi reject`,
+      message: `Status Precosting ${updated.precostingNo} berhasil diubah menjadi Rejected`,
       data: updated,
     });
   } catch (error) {

@@ -1,22 +1,31 @@
 import React from 'react';
 import { usePrecosting } from '../../context/PrecostingContext';
 import { formatRupiah, formatNumber } from '../../utils/formatters';
-import { 
-  Layers, 
-  Clock, 
-  CheckCircle2, 
-  Package, 
-  TrendingUp, 
-  AlertCircle 
+import {
+  Layers,
+  Clock,
+  CheckCircle2,
+  Package,
+  TrendingUp,
+  AlertCircle
 } from 'lucide-react';
 
 export const SummaryStats = () => {
   const { precostings, statusFilter, setStatusFilter } = usePrecosting();
 
   const totalCount = precostings.length;
-  const pendingCount = precostings.filter((p) => p.status === 'Pending Approval').length;
-  const approvedCount = precostings.filter((p) => p.status === 'confirmed' || p.status === 'Approved').length;
-  const rejectCount = precostings.filter((p) => p.status === 'reject' || p.status === 'rejected' || p.status === 'Revision').length;
+  const pendingCount = precostings.filter((p) => {
+    const s = (p.status || '').toLowerCase().trim();
+    return s === 'pending' || s === 'pending approval';
+  }).length;
+  const approvedCount = precostings.filter((p) => {
+    const s = (p.status || '').toLowerCase().trim();
+    return s === 'confirmed' || s === 'approved' || s === 'confirm';
+  }).length;
+  const rejectCount = precostings.filter((p) => {
+    const s = (p.status || '').toLowerCase().trim();
+    return s === 'rejected' || s === 'reject' || s === 'revision';
+  }).length;
 
   const totalTargetQty = precostings.reduce(
     (sum, p) => sum + (Number(p.targetQty) || 0),
@@ -28,10 +37,13 @@ export const SummaryStats = () => {
     0
   );
 
+  const isPendingFilter = statusFilter.toLowerCase() === 'pending' || statusFilter === 'Pending Approval';
+  const isConfirmedFilter = statusFilter.toLowerCase() === 'confirmed' || statusFilter === 'Approved';
+
   return (
     <div className="summary-stats-compact-row">
       {/* Total Precosting Card */}
-      <div 
+      <div
         className={`stat-compact-card ${statusFilter === 'ALL' ? 'active-filter' : ''}`}
         onClick={() => setStatusFilter('ALL')}
         role="button"
@@ -49,19 +61,19 @@ export const SummaryStats = () => {
         </div>
       </div>
 
-      {/* Pending Approval Card */}
-      <div 
-        className={`stat-compact-card warning-card ${statusFilter === 'Pending Approval' ? 'active-filter' : ''}`}
-        onClick={() => setStatusFilter(statusFilter === 'Pending Approval' ? 'ALL' : 'Pending Approval')}
+      {/* Pending Card */}
+      <div
+        className={`stat-compact-card warning-card ${isPendingFilter ? 'active-filter' : ''}`}
+        onClick={() => setStatusFilter(isPendingFilter ? 'ALL' : 'Pending')}
         role="button"
         tabIndex={0}
-        title="Klik untuk filter: Menunggu Approval"
+        title="Klik untuk filter: Pending"
       >
         <div className="stat-compact-icon warning">
           <Clock size={16} />
         </div>
         <div className="stat-compact-body">
-          <span className="stat-compact-title">Menunggu Approval</span>
+          <span className="stat-compact-title">Pending</span>
           <div className="stat-compact-val text-amber">
             {pendingCount} <span className="stat-compact-unit">Model</span>
           </div>
@@ -69,9 +81,9 @@ export const SummaryStats = () => {
       </div>
 
       {/* Confirmed Card */}
-      <div 
-        className={`stat-compact-card success-card ${statusFilter === 'confirmed' || statusFilter === 'Approved' ? 'active-filter' : ''}`}
-        onClick={() => setStatusFilter(statusFilter === 'confirmed' ? 'ALL' : 'confirmed')}
+      <div
+        className={`stat-compact-card success-card ${isConfirmedFilter ? 'active-filter' : ''}`}
+        onClick={() => setStatusFilter(isConfirmedFilter ? 'ALL' : 'Confirmed')}
         role="button"
         tabIndex={0}
         title="Klik untuk filter: Confirmed"
@@ -88,7 +100,7 @@ export const SummaryStats = () => {
       </div>
 
       {/* Target Qty Card */}
-      <div 
+      {/* <div 
         className="stat-compact-card"
         title="Total akumulasi kuantitas produksi"
       >
@@ -101,10 +113,10 @@ export const SummaryStats = () => {
             {formatNumber(totalTargetQty)} <span className="stat-compact-unit">Pcs</span>
           </div>
         </div>
-      </div>
+      </div> */}
 
       {/* Total Production Cost / HPP Value */}
-      <div 
+      {/* <div 
         className="stat-compact-card highlight-card"
         title="Total estimasi biaya modal produksi (HPP)"
       >
@@ -117,7 +129,7 @@ export const SummaryStats = () => {
             {formatRupiah(totalProductionValue)}
           </div>
         </div>
-      </div>
+      </div> */}
     </div>
   );
 };

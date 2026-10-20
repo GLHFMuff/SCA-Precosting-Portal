@@ -7,6 +7,17 @@ import { ensureBase64Image } from '../utils/imageHelper.js';
 let memoryPrecostings = [];
 let memoryUsers = [...defaultUsers];
 
+// Helper to standardize status according to system rules:
+// reject => Rejected, confirmed => Confirmed, Pending Approval => Pending
+export function normalizeStatus(val) {
+  if (!val || typeof val !== 'string') return 'Pending';
+  const s = val.trim().toLowerCase();
+  if (s === 'confirmed' || s === 'confirm' || s === 'approved') return 'Confirmed';
+  if (s === 'rejected' || s === 'reject' || s === 'revision') return 'Rejected';
+  if (s === 'pending' || s === 'pending approval' || s === 'menunggu approval') return 'Pending';
+  return 'Pending';
+}
+
 // Helper to map DB row from "PrecostingHeader" to frontend domain model
 function mapDbRowToPrecosting(row) {
   const parseJson = (val, fallback = []) => {
@@ -52,7 +63,10 @@ function mapDbRowToPrecosting(row) {
     hargaAccessories: accPrice,
     hpp,
     ppn: taxPrice,
-    status: row.Status || 'Pending Approval',
+    status: normalizeStatus(row.Status),
+    Status: normalizeStatus(row.Status),
+    sync_status: row.sync_status || row.SyncStatus || 'pending',
+    syncStatus: row.sync_status || row.SyncStatus || 'pending',
     buyer: row.Buyer || 'Global Buyer',
     category: row.Category || 'Garment',
     deliveryDate: row.DeliveryDate || '',
@@ -272,7 +286,17 @@ function parseNumeric(val) {
   // Status
   const status = payload.Status ?? payload.status ?? null;
   if (status !== null && status !== undefined && String(status).trim() !== '') {
-    result.status = String(status).trim();
+    result.status = normalizeStatus(String(status).trim());
+  }
+
+  // sync_status
+  const syncStatus =
+    payload.sync_status ??
+    payload.syncStatus ??
+    payload.SyncStatus ??
+    null;
+  if (syncStatus !== null && syncStatus !== undefined && String(syncStatus).trim() !== '') {
+    result.sync_status = String(syncStatus).trim();
   }
 
   // Buyer
@@ -365,7 +389,7 @@ export const precostingStore = {
       const queryText = `
         SELECT 
           id, "ProductImage", "ProdImage_base64", "ProdQty", "ProdName", "Consume", "FabricPrice", 
-          "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status",
+          "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status", "sync_status",
           created_at, "PrecostingNo", "Buyer", "Category", "DeliveryDate",
           "ApprovedBy", "ApprovalDate", "ApprovedDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
         FROM "PrecostingHeader" 
@@ -433,7 +457,7 @@ export const precostingStore = {
       const queryText = `
         SELECT 
           id, "ProductImage", "ProdImage_base64", "ProdQty", "ProdName", "Consume", "FabricPrice", 
-          "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status",
+          "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status", "sync_status",
           created_at, "PrecostingNo", "Buyer", "Category", "DeliveryDate",
           "ApprovedBy", "ApprovalDate", "ApprovedDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
         FROM "PrecostingHeader" 
@@ -464,6 +488,9 @@ export const precostingStore = {
     } else {
       data.precostingNo = data.precostingNo.trim();
     }
+
+    // Requirement: Ketika API POST precosting dijalankan, sync_status = 'pending'
+    data.sync_status = 'pending';
 
     let existingId = null;
 
@@ -497,7 +524,9 @@ export const precostingStore = {
       buyer: data.buyer || 'Global Buyer',
       category: data.category || 'Garment',
       deliveryDate: data.deliveryDate || '',
-      status: data.status || 'Pending Approval',
+      status: data.status ? normalizeStatus(data.status) : 'Pending',
+      sync_status: 'pending',
+      syncStatus: 'pending',
       approvedBy: data.approvedBy || null,
       approvalDate: data.approvalDate || data.approvedDate || null,
       approvedDate: data.approvedDate || data.approvalDate || null,
@@ -516,19 +545,24 @@ export const precostingStore = {
         },
       ],
       ...data,
+      sync_status: 'pending',
+      syncStatus: 'pending',
     };
 
     const calculated = calculatePrecostingTotals(newItem);
+    calculated.status = normalizeStatus(calculated.status);
+    calculated.sync_status = 'pending';
+    calculated.syncStatus = 'pending';
 
     try {
       const imgBase64 = calculated.image ? ensureBase64Image(calculated.image) : '';
       const insertSql = `
         INSERT INTO "PrecostingHeader" (
           "ProductImage", "ProdImage_base64", "ProdQty", "ProdName", "Consume", "FabricPrice", 
-          "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status",
+          "TotalFabricPrice", "CMTPrice", "AccPrice", "HPP", "TaxPrice", "Status", "sync_status",
           "PrecostingNo", "Buyer", "Category", "DeliveryDate", "ApprovedBy", 
           "ApprovalDate", "ApprovedDate", "ApprovalNotes", "Fabrics", "Accessories", "Services", "Remarks"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
         RETURNING id
       `;
       const res = await query(insertSql, [
@@ -543,7 +577,8 @@ export const precostingStore = {
         calculated.accCostPerPcs || 0,
         calculated.hppPerPcs || 0,
         calculated.ppnPerPcs || 0,
-        calculated.status || 'Pending Approval',
+        calculated.status || 'Pending',
+        'pending',
         calculated.precostingNo,
         calculated.buyer || '',
         calculated.category || '',
@@ -593,6 +628,8 @@ export const precostingStore = {
       ...data,
       id: existing.id,
       precostingNo: data.precostingNo || existing.precostingNo,
+      sync_status: data.sync_status || existing.sync_status || 'pending',
+      syncStatus: data.sync_status || existing.syncStatus || 'pending',
     };
 
     // If direct cost fields were provided or updated, keep them aligned
@@ -605,6 +642,8 @@ export const precostingStore = {
     }
 
     const updated = calculatePrecostingTotals(merged);
+    updated.sync_status = merged.sync_status;
+    updated.syncStatus = merged.syncStatus;
 
     try {
       const updateSql = `
@@ -632,8 +671,10 @@ export const precostingStore = {
           "DeliveryDate" = $20,
           "ProductImage" = COALESCE($21, "ProductImage"),
           "ProdImage_base64" = COALESCE($21, "ProdImage_base64"),
-          "PrecostingNo" = COALESCE($22, "PrecostingNo")
-        WHERE id::text = $23 OR "PrecostingNo" = $23
+          "PrecostingNo" = COALESCE($22, "PrecostingNo"),
+          "sync_status" = COALESCE($23, "sync_status", 'pending'),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id::text = $24 OR "PrecostingNo" = $24
       `;
       await query(updateSql, [
         updated.status,
@@ -658,6 +699,7 @@ export const precostingStore = {
         updated.deliveryDate || '',
         updated.image ? ensureBase64Image(updated.image) : null,
         updated.precostingNo || null,
+        data.sync_status || null,
         String(existing.id),
       ]);
     } catch (err) {
@@ -742,7 +784,7 @@ export const precostingStore = {
     }
 
     return await this.update(id, {
-      status: 'confirmed',
+      status: 'Confirmed',
       approvedBy: approverName,
       approvalDate: timestamp,
       approvedDate: timestamp,
@@ -772,7 +814,7 @@ export const precostingStore = {
     }
 
     return await this.update(id, {
-      status: 'reject',
+      status: 'Rejected',
       approvalNotes: notes ? notes.trim() : 'Rejected via Precosting Portal',
       remarks,
     });
@@ -810,10 +852,19 @@ export const precostingStore = {
   async getStats() {
     const items = await this.getAll();
     const totalCount = items.length;
-    const pendingCount = items.filter((p) => p.status === 'Pending Approval').length;
-    const approvedCount = items.filter((p) => p.status === 'confirmed' || p.status === 'Approved').length;
-    const revisionCount = items.filter((p) => p.status === 'reject' || p.status === 'rejected' || p.status === 'Revision').length;
-    const draftCount = items.filter((p) => p.status === 'Draft').length;
+    const pendingCount = items.filter((p) => {
+      const s = (p.status || '').toLowerCase();
+      return s === 'pending' || s === 'pending approval';
+    }).length;
+    const approvedCount = items.filter((p) => {
+      const s = (p.status || '').toLowerCase();
+      return s === 'confirmed' || s === 'approved' || s === 'confirm';
+    }).length;
+    const revisionCount = items.filter((p) => {
+      const s = (p.status || '').toLowerCase();
+      return s === 'rejected' || s === 'reject' || s === 'revision';
+    }).length;
+    const draftCount = items.filter((p) => (p.status || '').toLowerCase() === 'draft').length;
 
     const totalTargetQty = items.reduce((sum, p) => sum + (Number(p.targetQty) || 0), 0);
     const totalProductionValue = items.reduce((sum, p) => sum + (Number(p.hppAllQty) || 0), 0);
@@ -838,11 +889,11 @@ export const precostingStore = {
   },
 
   // 10c. Get lightweight status summary (only PrecostingNo, status, remarks) without affecting getAll
-  async getStatusSummary({ status = 'confirm,reject', search = '', sortBy = 'date-desc' } = {}) {
+  async getStatusSummary({ status = 'confirm,reject', search = '', sortBy = 'date-desc', sync_status = 'pending' } = {}) {
     let rows = [];
     try {
       const queryText = `
-        SELECT id, "PrecostingNo", "Status", "ApprovalNotes", "Remarks", created_at
+        SELECT id, "PrecostingNo", "Status", "ApprovalNotes", "Remarks", "sync_status", created_at
         FROM "PrecostingHeader"
         ORDER BY id DESC
       `;
@@ -853,9 +904,10 @@ export const precostingStore = {
       rows = memoryPrecostings.map((m) => ({
         id: m.id,
         PrecostingNo: m.precostingNo || m.PrecostingNo || '',
-        Status: m.status || m.Status || 'Pending Approval',
+        Status: normalizeStatus(m.status || m.Status),
         ApprovalNotes: m.approvalNotes || m.ApprovalNotes || '',
         Remarks: m.remarks || m.Remarks || [],
+        sync_status: m.sync_status || 'pending',
         created_at: m.createdDate,
       }));
     }
@@ -896,6 +948,13 @@ export const precostingStore = {
         return false;
       }
 
+      // Requirement: Ketika api/precostings/confirm-reject dijalankan, hanya mengambil data precosting yang sync_statusnya pending
+      const targetSyncStatus = (sync_status || 'pending').toLowerCase().trim();
+      const itemSyncStatus = (row.sync_status || 'pending').toLowerCase().trim();
+      if (targetSyncStatus !== 'all' && targetSyncStatus !== 'semua' && itemSyncStatus !== targetSyncStatus) {
+        return false;
+      }
+
       // Status filter
       if (!targetStatus || targetStatus === 'confirm,reject' || targetStatus === 'confirm-reject' || targetStatus === 'processed' || targetStatus === 'both') {
         return (
@@ -924,8 +983,9 @@ export const precostingStore = {
 
     return filtered.map((row) => ({
       PrecostingNo: row.PrecostingNo || (row.id ? `PC-${String(row.id).padStart(4, '0')}` : ''),
-      status: row.Status || 'Pending Approval',
+      status: normalizeStatus(row.Status),
       remarks: extractRemarkText(row.ApprovalNotes, row.Remarks),
+      sync_status: row.sync_status || 'pending',
     }));
   },
 
@@ -934,13 +994,132 @@ export const precostingStore = {
     return await this.getStatusSummary(params);
   },
 
-  // 11. Users
-  getUsers() {
-    return memoryUsers;
+  // 10d. Update sync_status to "synched" (or custom) for one or multiple PrecostingNo
+  async updateSyncStatus(precostingNosInput, status = 'synched') {
+    const targetStatus = String(status || 'synched').trim();
+
+    // Normalize input to array of non-empty strings
+    const rawList = Array.isArray(precostingNosInput)
+      ? precostingNosInput
+      : [precostingNosInput];
+
+    const precostingNos = rawList
+      .map((item) => {
+        if (!item && item !== 0) return '';
+        if (typeof item === 'string') return item.trim();
+        if (typeof item === 'number') return String(item).trim();
+        if (typeof item === 'object') {
+          return String(item.precosting_no || item.PrecostingNo || item.precostingNo || item.id || '').trim();
+        }
+        return '';
+      })
+      .filter((s) => s.length > 0);
+
+    if (precostingNos.length === 0) {
+      return {
+        success: false,
+        sync_status: targetStatus,
+        total_requested: 0,
+        total_updated: 0,
+        updated: [],
+        not_found: [],
+        message: 'Tidak ada precosting_no yang valid untuk diperbarui.',
+      };
+    }
+
+    const uniqueNos = [...new Set(precostingNos)];
+    const lookupKeys = uniqueNos.map((k) => k.toLowerCase());
+
+    let updatedNos = [];
+
+    try {
+      const updateSql = `
+        UPDATE "PrecostingHeader"
+        SET "sync_status" = $1, updated_at = CURRENT_TIMESTAMP
+        WHERE LOWER(TRIM("PrecostingNo")) = ANY($2::text[])
+           OR id::text = ANY($2::text[])
+        RETURNING "PrecostingNo", id, "sync_status"
+      `;
+      const res = await query(updateSql, [targetStatus, lookupKeys]);
+      const rows = res.rows || [];
+      updatedNos = rows.map((r) => r.PrecostingNo || String(r.id));
+    } catch (err) {
+      console.warn('Error updating sync_status in PostgreSQL (fallback to memory):', err.message);
+    }
+
+    // Always keep in-memory store in sync as well
+    for (const p of memoryPrecostings) {
+      const pNo = (p.precostingNo || '').toLowerCase().trim();
+      const pId = String(p.id || '').toLowerCase().trim();
+      if (lookupKeys.includes(pNo) || lookupKeys.includes(pId)) {
+        p.sync_status = targetStatus;
+        p.syncStatus = targetStatus;
+        const canonicalNo = p.precostingNo || String(p.id);
+        if (!updatedNos.some((u) => u.toLowerCase() === canonicalNo.toLowerCase())) {
+          updatedNos.push(canonicalNo);
+        }
+      }
+    }
+
+    // Determine which requested numbers were not found
+    const notFound = uniqueNos.filter((no) => {
+      const lower = no.toLowerCase();
+      return !updatedNos.some((u) => String(u).toLowerCase().trim() === lower);
+    });
+
+    return {
+      success: true,
+      sync_status: targetStatus,
+      total_requested: uniqueNos.length,
+      total_updated: updatedNos.length,
+      updated: updatedNos,
+      not_found: notFound,
+    };
   },
 
-  findUserByUsername(username) {
-    return memoryUsers.find((u) => u.username.toLowerCase() === (username || '').toLowerCase());
+  // 11. Users (Stored in Database)
+  async getUsers() {
+    const dbStatus = getDbStatus();
+    if (dbStatus.isConnected) {
+      try {
+        const res = await query(
+          'SELECT id, username, name, role, department, avatar FROM "Users" ORDER BY id ASC'
+        );
+        if (res.rows && res.rows.length > 0) {
+          return res.rows;
+        }
+      } catch (err) {
+        console.error('Error fetching users from PostgreSQL:', err.message);
+      }
+    }
+    return memoryUsers.map(({ password, ...u }) => u);
+  },
+
+  async findUserByUsername(username) {
+    if (!username) return null;
+    const clean = String(username).trim().toLowerCase();
+
+    // Support common aliases e.g. dev -> developer, bos/pimpinan/direktur -> management
+    const searchUsernames = [clean];
+    if (clean === 'dev') searchUsernames.push('developer');
+    if (clean === 'bos' || clean === 'pimpinan' || clean === 'direktur' || clean === 'mgmt') searchUsernames.push('management');
+
+    const dbStatus = getDbStatus();
+    if (dbStatus.isConnected) {
+      try {
+        const res = await query(
+          'SELECT * FROM "Users" WHERE LOWER(TRIM(username)) = ANY($1::text[]) LIMIT 1',
+          [searchUsernames]
+        );
+        if (res.rows && res.rows[0]) {
+          return res.rows[0];
+        }
+      } catch (err) {
+        console.error('Error querying user from PostgreSQL:', err.message);
+      }
+    }
+
+    return memoryUsers.find((u) => searchUsernames.includes(u.username.toLowerCase()));
   },
 };
 

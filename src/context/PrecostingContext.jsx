@@ -73,7 +73,7 @@ export const PrecostingProvider = ({ children }) => {
 
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL', 'Pending Approval', 'Approved', 'Draft', 'Revision'
+  const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL', 'Pending', 'Confirmed', 'Rejected', 'Draft'
   const [sortBy, setSortBy] = useState('date-desc'); // 'date-desc', 'qty-desc', 'cost-desc', 'name-asc'
 
   // Modals state
@@ -179,7 +179,7 @@ export const PrecostingProvider = ({ children }) => {
           if (String(item.id) === String(precostingId)) {
             return calculatePrecostingTotals({
               ...item,
-              status: 'confirmed',
+              status: 'Confirmed',
               approvedBy: approverName,
               approvalDate: approvedDate,
               approvedDate: approvedDate,
@@ -224,7 +224,7 @@ export const PrecostingProvider = ({ children }) => {
             });
             return calculatePrecostingTotals({
               ...item,
-              status: 'reject',
+              status: 'Rejected',
               approvalNotes: reason.trim(),
               remarks,
             });

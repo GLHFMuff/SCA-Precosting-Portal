@@ -24,6 +24,11 @@ export const RejectModal = () => {
   if (!rejectModalItem) return null;
 
   const item = rejectModalItem;
+  const isAlreadyDecided = 
+    item.status?.toLowerCase() === 'confirmed' || 
+    item.status?.toLowerCase() === 'approved' ||
+    item.status?.toLowerCase() === 'reject' || 
+    item.status?.toLowerCase() === 'rejected';
 
   const handleClose = () => {
     setRemarks('');
@@ -33,6 +38,10 @@ export const RejectModal = () => {
 
   const handleConfirmReject = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
+    if (isAlreadyDecided) {
+      setErrorMessage('Precosting sudah berstatus ' + item.status + ' dan tidak dapat diubah lagi.');
+      return;
+    }
     if (!remarks.trim()) {
       setErrorMessage('Catatan / remarks alasan penolakan wajib diisi!');
       return;
@@ -55,9 +64,9 @@ export const RejectModal = () => {
               <XCircle size={22} />
             </div>
             <div>
-              <h3 className="modal-title">Konfirmasi Tolak (Reject) Precosting</h3>
+              <h3 className="modal-title">Konfirmasi Tolak (Rejected) Precosting</h3>
               <p className="modal-subtitle">
-                Status akan diubah menjadi Reject. Wajib menyertakan catatan alasan penolakan.
+                Status akan diubah menjadi Rejected. Wajib menyertakan catatan alasan penolakan.
               </p>
             </div>
           </div>
@@ -99,7 +108,7 @@ export const RejectModal = () => {
           <div className="reject-alert-banner">
             <AlertTriangle size={18} className="reject-alert-icon" />
             <div className="reject-alert-text">
-              Tindakan ini akan mengupdate status Precosting menjadi <strong>"reject"</strong>. 
+              Tindakan ini akan mengupdate status Precosting menjadi <strong>"Rejected"</strong>. 
               Merchandiser / Tim Costing akan menerima catatan penolakan ini untuk evaluasi dan tindak lanjut.
             </div>
           </div>
@@ -156,8 +165,8 @@ export const RejectModal = () => {
             type="button" 
             className="btn-modal-confirm-reject"
             onClick={handleConfirmReject}
-            disabled={!remarks.trim()}
-            title={!remarks.trim() ? 'Isi remarks terlebih dahulu' : 'Konfirmasi Tolak (Reject)'}
+            disabled={!remarks.trim() || isAlreadyDecided}
+            title={isAlreadyDecided ? 'Precosting sudah diproses sebelumnya' : (!remarks.trim() ? 'Isi remarks terlebih dahulu' : 'Konfirmasi Tolak (Reject)')}
           >
             <XCircle size={16} />
             <span>Konfirmasi Reject</span>

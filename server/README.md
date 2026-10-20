@@ -94,9 +94,10 @@ npm run db:seed   # Memasukkan data awal (users, 6 model precosting, kain, acc, 
 |---|---|---|
 | `GET` | `/api/health` | Status server & koneksi database |
 | `GET` | `/api/precostings` | Ambil semua data precosting (support `?search=`, `?status=`, `?sortBy=`) |
-| `GET` | `/api/precostings/confirm-reject` | **Ambil semua data status Confirm & Reject sekaligus** (tanpa lempar parameter) |
+| `GET` / `POST` | `/api/precostings/confirm-reject` | **Ambil data Confirm & Reject** (Hanya yang `sync_status = "pending"`) |
+| `POST` | `/api/precostings/sync-status` | **Update `sync_status` menjadi `"synched"`** (bisa 1 atau banyak `precosting_no` sekaligus) |
 | `GET` | `/api/precostings/:id` | Detail lengkap satu precosting (fabric, acc, jasa, remarks) |
-| `POST` | `/api/precostings` | Tambah precosting baru (True UPSERT) |
+| `POST` | `/api/precostings` | Tambah precosting baru (True UPSERT, otomatis `sync_status = "pending"`) |
 | `POST` / `PUT` | `/api/precostings/update-image` | **Update Gambar Base64 saja** (`PrecostingNo` & `ProdImage_base64` di body) |
 | `POST` / `PUT` | `/api/precostings/:id/image` | **Update Gambar Base64 saja** (`:id` di URL, `ProdImage_base64` di body) |
 | `PUT` | `/api/precostings/:id` | Update data precosting |
@@ -142,7 +143,8 @@ API `POST /api/precostings` telah menggunakan **skema validasi ketat (strict & f
 | `Buyer` | `buyer` | String | Opsional | Nama buyer / pemesan (misal `"Global Buyer"` atau `"Uniqlo"`). Default: `"Global Buyer"`. |
 | `Category` | `category` | String | Opsional | Kategori garmen (misal `"Garment"`, `"Kemeja"`, `"Celana"`). Default: `"Garment"`. |
 | `DeliveryDate` | `deliveryDate` | String | Opsional | Target tanggal pengiriman (format `"YYYY-MM-DD"`, misal `"2026-11-20"`). |
-| `Status` | `status` | String | Opsional | Status dokumen (`"Pending Approval"`, `"Approved"`, `"Revision"`, `"Draft"`). Default: `"Pending Approval"`. |
+| `Status` | `status` | String | Opsional | Status dokumen (`"Pending"`, `"Confirmed"`, `"Rejected"`, `"Draft"`). Default: `"Pending"`. |
+| `sync_status` | `syncStatus` | String | Opsional | Status sinkronisasi ke sistem eksternal (`"pending"` / `"synched"`). **Default: `"pending"`**. Saat API `POST /api/precostings` dijalankan, nilai otomatis menjadi `"pending"`. |
 | `HPP` | `hpp` | Number | Opsional | Harga Pokok Produksi. Otomatis dihitung: `(TotalFabric + CMT + Acc) * 1.025` jika tidak dikirim. |
 | `TaxPrice` | `taxPrice` | Number | Opsional | Nilai PPN 11%. Otomatis dihitung: `HPP * 0.11` jika tidak dikirim. |
 | `Fabrics` | `fabrics` | Array | Opsional | Rincian jika bahan kain lebih dari 1 jenis (Array of Object). |
@@ -172,7 +174,7 @@ API `POST /api/precostings` telah menggunakan **skema validasi ketat (strict & f
   "Buyer": "Uniqlo Indonesia",
   "Category": "Kemeja",
   "DeliveryDate": "2026-11-20",
-  "Status": "Pending Approval"
+  "Status": "Pending"
 }
 ```
 
@@ -193,7 +195,7 @@ API `POST /api/precostings` telah menggunakan **skema validasi ketat (strict & f
   "Buyer": "The North Brand",
   "Category": "Outerwear",
   "DeliveryDate": "2026-12-15",
-  "Status": "Pending Approval",
+  "Status": "Pending",
   "Fabrics": [
     {
       "id": "f-1",
@@ -276,7 +278,7 @@ API `POST /api/precostings` telah menggunakan **skema validasi ketat (strict & f
     "accPrice": 6000,
     "hpp": 113570,
     "taxPrice": 12493,
-    "status": "Pending Approval",
+    "status": "Pending",
     "buyer": "Uniqlo Indonesia",
     "category": "Kemeja",
     "deliveryDate": "2026-11-20",
@@ -440,8 +442,11 @@ Disediakan khusus untuk integrasi dengan aplikasi utama (C# .NET) yang menggunak
 
 ### 📥 Format Payload JSON (Body Request):
 
+> **⚠️ Aturan Sinkronisasi (`sync_status`):**
+> Endpoint `api/precostings/confirm-reject` secara default **HANYA mengambil data yang `sync_status`-nya `"pending"`**. Data yang telah diperbarui menjadi `"synched"` tidak akan diambil lagi, sehingga mencegah duplikasi proses sinkronisasi di aplikasi utama.
+
 #### 1. Mengambil Sekaligus Status `confirm` DAN `reject` (Status Kosong):
-Jika field `status` dikosongkan (`""`, `null`, atau tidak disertakan `{}`), API secara otomatis mengambil data yang statusnya **`confirm`** (confirmed / approved) dan **`reject`** (reject / revision), tanpa mengikutsertakan Draft atau Pending Approval.
+Jika field `status` dikosongkan (`""`, `null`, atau tidak disertakan `{}`), API secara otomatis mengambil data yang statusnya **`confirm`** (confirmed / approved) dan **`reject`** (reject / revision) dengan `sync_status = "pending"`.
 ```json
 {
   "status": ""
@@ -490,12 +495,12 @@ Setiap item di dalam array `data` khusus endpoint ini hanya mengembalikan 3 fiel
   "data": [
     {
       "PrecostingNo": "CBD-2610-00001",
-      "status": "confirmed",
+      "status": "Confirmed",
       "remarks": "Approved for production"
     },
     {
       "PrecostingNo": "CBD-2610-00005",
-      "status": "reject",
+      "status": "Rejected",
       "remarks": "Harga kain melebihi budget target"
     }
   ]
@@ -519,5 +524,83 @@ string rejectJson = ShootAPIWithToken(rejectPayload, endpoint, token);
 string confirmPayload = "{\"status\": \"confirm\"}";
 string confirmJson = ShootAPIWithToken(confirmPayload, endpoint, token);
 ```
+
+---
+
+## 🔄 Endpoint Update `sync_status` Menjadi "synched"
+
+Setelah aplikasi utama berhasil menarik dan memproses data dari endpoint `confirm-reject`, panggil endpoint ini untuk menandai bahwa data telah berhasil disinkronkan (`sync_status = "synched"`).
+
+### URL Endpoint:
+- **`POST http://localhost:5001/api/precostings/sync-status`**
+- *Atau alias URL:* `/api/precostings/update-sync-status`, `/api/precostings/synched`, `/api/precostings/sync`
+
+---
+
+### 📥 Format Payload JSON (Bisa 1 atau Banyak Sekaligus):
+
+#### Opsi 1: Array of Strings (Rekomendasi untuk batch multiple precosting)
+```json
+{
+  "precosting_no": [
+    "CBD-2610-00001",
+    "CBD-2610-00005"
+  ]
+}
+```
+
+#### Opsi 2: Single String (Untuk 1 data saja)
+```json
+{
+  "precosting_no": "CBD-2610-00001"
+}
+```
+
+#### Opsi 3: Array JSON Langsung
+```json
+[
+  "CBD-2610-00001",
+  "CBD-2610-00005"
+]
+```
+
+#### Opsi 4: Array of Objects
+```json
+[
+  { "precosting_no": "CBD-2610-00001" },
+  { "precosting_no": "CBD-2610-00005" }
+]
+```
+
+---
+
+### 📤 Contoh Respon Sukses (HTTP 200 OK):
+```json
+{
+  "success": true,
+  "status": "1",
+  "error_list": "",
+  "message": "Berhasil memperbarui sync_status menjadi 'synched' untuk 2 data precosting",
+  "sync_status": "synched",
+  "total_requested": 2,
+  "total_updated": 2,
+  "updated": [
+    "CBD-2610-00001",
+    "CBD-2610-00005"
+  ],
+  "not_found": []
+}
+```
+
+---
+
+### 💻 Contoh Pemanggilan dari C# (.NET):
+```csharp
+// Mengirim array precosting_no yang telah berhasil disinkronkan ke server lokal
+string updatePayload = "{\"precosting_no\": [\"CBD-2610-00001\", \"CBD-2610-00005\"]}";
+string syncEndpoint = "http://localhost:5001/api/precostings/sync-status";
+string syncResponse = ShootAPIWithToken(updatePayload, syncEndpoint, token);
+```
+
 
 

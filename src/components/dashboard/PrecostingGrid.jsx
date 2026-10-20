@@ -55,13 +55,18 @@ export const PrecostingGrid = () => {
       (item.buyer && item.buyer.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (item.category && item.category.toLowerCase().includes(searchTerm.toLowerCase()));
 
+    const s = (item.status || '').toLowerCase().trim();
+    const filter = (statusFilter || 'ALL').toLowerCase().trim();
+
     const matchesStatus =
-      statusFilter === 'ALL' ||
-      (statusFilter === 'confirmed'
-        ? item.status === 'confirmed' || item.status === 'Approved'
-        : statusFilter === 'reject'
-        ? item.status === 'reject' || item.status === 'rejected' || item.status === 'Revision'
-        : item.status === statusFilter);
+      filter === 'all' ||
+      (filter === 'confirmed' || filter === 'approved' || filter === 'confirm'
+        ? s === 'confirmed' || s === 'approved' || s === 'confirm'
+        : filter === 'rejected' || filter === 'reject' || filter === 'revision'
+          ? s === 'rejected' || s === 'reject' || s === 'revision'
+          : filter === 'pending' || filter === 'pending approval'
+            ? s === 'pending' || s === 'pending approval'
+            : s === filter);
 
     return matchesSearch && matchesStatus;
   });
@@ -84,36 +89,47 @@ export const PrecostingGrid = () => {
   });
 
   const getStatusBadge = (status) => {
-    switch (status) {
+    const s = (status || '').toLowerCase().trim();
+    switch (s) {
       case 'confirmed':
-      case 'Approved':
+      case 'approved':
+      case 'confirm':
         return (
           <span className="badge badge-success">
             <CheckCircle size={12} className="badge-icon-left" /> Confirmed
           </span>
         );
-      case 'Pending Approval':
-        return (
-          <span className="badge badge-warning">
-            <Clock size={12} className="badge-icon-left" /> Menunggu Otorisasi
-          </span>
-        );
-      case 'reject':
       case 'rejected':
-      case 'Revision':
+      case 'reject':
+      case 'revision':
         return (
           <span className="badge badge-danger">
             <XCircle size={12} className="badge-icon-left" /> Rejected
           </span>
         );
-      case 'Draft':
+      case 'pending':
+      case 'pending approval':
+      case 'draft':
       default:
         return (
-          <span className="badge badge-secondary">
-            Draft
+          <span className="badge badge-warning">
+            <Clock size={12} className="badge-icon-left" /> Pending
           </span>
         );
     }
+  };
+
+  const getSyncBadge = (syncStatus) => {
+    const isSynched = (syncStatus || '').toLowerCase() === 'synched';
+    return (
+      <span
+        className={`badge ${isSynched ? 'badge-success' : 'badge-warning'}`}
+        style={{ fontSize: '10px', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+        title={`Status Sinkronisasi API: ${syncStatus || 'pending'}`}
+      >
+        {isSynched ? '✓ Synched' : '⟳ Sync Pending'}
+      </span>
+    );
   };
 
   const handleApprove = (item) => {
@@ -149,20 +165,27 @@ export const PrecostingGrid = () => {
           <div className="status-tabs-wrapper">
             {[
               { id: 'ALL', label: 'Semua' },
-              { id: 'Pending Approval', label: 'Menunggu Approval' },
-              { id: 'confirmed', label: 'Confirmed' },
-              { id: 'reject', label: 'Rejected' },
+              { id: 'Pending', label: 'Pending' },
+              { id: 'Confirmed', label: 'Confirmed' },
+              { id: 'Rejected', label: 'Rejected' },
               { id: 'Draft', label: 'Draft' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                className={`status-tab-btn ${statusFilter === tab.id ? 'active' : ''}`}
-                onClick={() => setStatusFilter(tab.id)}
-              >
-                {tab.label}
-              </button>
-            ))}
+            ].map((tab) => {
+              const active =
+                statusFilter.toLowerCase() === tab.id.toLowerCase() ||
+                (tab.id === 'Pending' && statusFilter === 'Pending Approval') ||
+                (tab.id === 'Confirmed' && statusFilter === 'confirmed') ||
+                (tab.id === 'Rejected' && (statusFilter === 'reject' || statusFilter === 'rejected'));
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`status-tab-btn ${active ? 'active' : ''}`}
+                  onClick={() => setStatusFilter(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
 
           {/* Sort & Mobile View Toggle */}
@@ -431,7 +454,8 @@ export const PrecostingGrid = () => {
                           <div className="item-meta-sub">
                             <span className="item-category-tag">{item.category}</span>
                             {item.buyer && <span className="item-buyer-name">• {item.buyer}</span>}
-                            <span className="style-status-inline">{getStatusBadge(item.status)}</span>
+                            <span className="style-status-inline">{getStatusBadge(item.status || item.Status)}</span>
+                            {getSyncBadge(item.sync_status)}
                           </div>
                         </div>
                       </td>
@@ -481,44 +505,66 @@ export const PrecostingGrid = () => {
 
                       {/* 12. Action (Detail & Approve / Not Approve) */}
                       <td className="td-center td-actions-cell">
-                        <div className="grid-action-buttons">
-                          {/* Detail Button */}
-                          <button
-                            type="button"
-                            className="btn-action btn-view-detail"
-                            onClick={() => selectPrecosting(item.id)}
-                            title="Buka View Detail Lengkap"
-                          >
-                            <Eye size={13} />
-                            <span>Detail</span>
-                          </button>
+                        {(() => {
+                          const itemStatus = (item.status || item.Status || '').toLowerCase().trim();
+                          const isConfirmed = itemStatus === 'confirmed' || itemStatus === 'approved' || itemStatus === 'confirm';
+                          const isRejected = itemStatus === 'rejected' || itemStatus === 'reject' || itemStatus === 'revision';
+                          const isPending = !isConfirmed && !isRejected;
 
-                          {/* Approve Button (Hanya tampil jika belum approve/confirmed) */}
-                          {!(item.status === 'confirmed' || item.status === 'Approved') && (
-                            <button
-                              type="button"
-                              className="btn-action btn-approve"
-                              onClick={() => handleApprove(item)}
-                              title="Setujui & Konfirmasi Precosting Ini"
-                            >
-                              <CheckCircle2 size={13} />
-                              <span>Approve</span>
-                            </button>
-                          )}
+                          return (
+                            <div className="grid-action-buttons">
+                              {/* Detail Button selalu tampil */}
+                              <button
+                                type="button"
+                                className="btn-action btn-view-detail"
+                                onClick={() => selectPrecosting(item.id)}
+                                title="Buka View Detail Lengkap"
+                              >
+                                <Eye size={13} />
+                                <span>Detail</span>
+                              </button>
 
-                          {/* Reject Button (Hanya tampil jika belum di-reject) */}
-                          {!(item.status === 'reject' || item.status === 'rejected') && (
-                            <button
-                              type="button"
-                              className="btn-action btn-not-approve"
-                              onClick={() => setRejectModalItem(item)}
-                              title="Tolak (Reject) Precosting & Beri Catatan"
-                            >
-                              <XCircle size={13} />
-                              <span>Reject</span>
-                            </button>
-                          )}
-                        </div>
+                              {/* Jika Pending: tombol Approve dan Reject tampil */}
+                              {isPending && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="btn-action btn-approve"
+                                    onClick={() => handleApprove(item)}
+                                    title="Setujui & Konfirmasi Precosting Ini"
+                                  >
+                                    <CheckCircle2 size={13} />
+                                    <span>Approve</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    className="btn-action btn-not-approve"
+                                    onClick={() => setRejectModalItem(item)}
+                                    title="Tolak (Reject) Precosting & Beri Catatan"
+                                  >
+                                    <XCircle size={13} />
+                                    <span>Reject</span>
+                                  </button>
+                                </>
+                              )}
+
+                              {/* Jika sudah Confirmed: tidak bisa approve atau reject lagi */}
+                              {/* {isConfirmed && (
+                                <span className="badge badge-success" style={{ fontSize: '11px', padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }} title="Precosting sudah dikonfirmasi (Confirmed)">
+                                  <CheckCircle2 size={12} /> Confirmed
+                                </span>
+                              )} */}
+
+                              {/* Jika sudah Rejected: tidak bisa approve atau reject lagi */}
+                              {/* {isRejected && (
+                                <span className="badge badge-danger" style={{ fontSize: '11px', padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }} title="Precosting sudah ditolak (Rejected)">
+                                  <XCircle size={12} /> Rejected
+                                </span>
+                              )} */}
+                            </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );
@@ -649,8 +695,9 @@ export const PrecostingGrid = () => {
                       {item.category} {item.buyer && `• ${item.buyer}`}
                     </div>
                   </div>
-                  <div className="card-status-wrapper">
+                  <div className="card-status-wrapper" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     {getStatusBadge(item.status)}
+                    {getSyncBadge(item.sync_status)}
                   </div>
                 </div>
 
@@ -699,29 +746,54 @@ export const PrecostingGrid = () => {
                     <span>Detail</span>
                   </button>
 
-                  {/* Mobile Approve Button (Hanya tampil jika belum approve/confirmed) */}
-                  {!(item.status === 'confirmed' || item.status === 'Approved') && (
-                    <button
-                      type="button"
-                      className="card-btn btn-approve"
-                      onClick={() => handleApprove(item)}
-                    >
-                      <CheckCircle2 size={14} />
-                      <span>Approve</span>
-                    </button>
-                  )}
+                  {(() => {
+                    const itemStatus = (item.status || item.Status || '').toLowerCase().trim();
+                    const isConfirmed = itemStatus === 'confirmed' || itemStatus === 'approved' || itemStatus === 'confirm';
+                    const isRejected = itemStatus === 'rejected' || itemStatus === 'reject' || itemStatus === 'revision';
+                    const isPending = !isConfirmed && !isRejected;
 
-                  {/* Mobile Reject Button (Hanya tampil jika belum di-reject) */}
-                  {!(item.status === 'reject' || item.status === 'rejected') && (
-                    <button
-                      type="button"
-                      className="card-btn btn-not-approve"
-                      onClick={() => setRejectModalItem(item)}
-                    >
-                      <XCircle size={14} />
-                      <span>Reject</span>
-                    </button>
-                  )}
+                    if (isPending) {
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            className="card-btn btn-approve"
+                            onClick={() => handleApprove(item)}
+                          >
+                            <CheckCircle2 size={14} />
+                            <span>Approve</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="card-btn btn-not-approve"
+                            onClick={() => setRejectModalItem(item)}
+                          >
+                            <XCircle size={14} />
+                            <span>Reject</span>
+                          </button>
+                        </>
+                      );
+                    }
+
+                    if (isConfirmed) {
+                      return (
+                        <span className="badge badge-success" style={{ padding: '6px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <CheckCircle2 size={13} /> Confirmed
+                        </span>
+                      );
+                    }
+
+                    if (isRejected) {
+                      return (
+                        <span className="badge badge-danger" style={{ padding: '6px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <XCircle size={13} /> Rejected
+                        </span>
+                      );
+                    }
+
+                    return null;
+                  })()}
                 </div>
               </div>
             );

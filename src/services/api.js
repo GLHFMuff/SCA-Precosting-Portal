@@ -121,6 +121,20 @@ export const precostingApi = {
     return await res.json();
   },
 
+  // Update sync status to 'synched' (or custom status) for one or multiple PrecostingNo
+  async updateSyncStatus(precostingNos, syncStatus = 'synched') {
+    const res = await fetch(`${API_BASE}/precostings/sync-status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        precosting_no: precostingNos,
+        sync_status: syncStatus,
+      }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  },
+
   // Login
   async login(username, password) {
     const res = await fetch(`${API_BASE}/auth/login`, {

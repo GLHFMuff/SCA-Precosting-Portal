@@ -20,8 +20,14 @@ export const MobileDrawer = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
-  const pendingCount = precostings.filter(p => p.status === 'Pending Approval').length;
-  const approvedCount = precostings.filter(p => p.status === 'confirmed' || p.status === 'Approved').length;
+  const pendingCount = precostings.filter(p => {
+    const s = (p.status || '').toLowerCase().trim();
+    return s === 'pending' || s === 'pending approval';
+  }).length;
+  const approvedCount = precostings.filter(p => {
+    const s = (p.status || '').toLowerCase().trim();
+    return s === 'confirmed' || s === 'approved' || s === 'confirm';
+  }).length;
 
   return (
     <div className="drawer-overlay" onClick={onClose}>
@@ -66,19 +72,19 @@ export const MobileDrawer = ({ isOpen, onClose }) => {
             className="drawer-nav-item"
             onClick={() => {
               clearSelectedPrecosting();
-              setStatusFilter('Pending Approval');
+              setStatusFilter('Pending');
               onClose();
             }}
           >
             <ShieldCheck size={18} />
-            <span>Menunggu Approval ({pendingCount})</span>
+            <span>Pending ({pendingCount})</span>
           </button>
 
           <button 
             className="drawer-nav-item"
             onClick={() => {
               clearSelectedPrecosting();
-              setStatusFilter('confirmed');
+              setStatusFilter('Confirmed');
               onClose();
             }}
           >

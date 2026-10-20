@@ -72,6 +72,11 @@ export const PrecostingDetail = () => {
   const jasaPercent = Math.round((normalizedJasaCost / totalCost) * 100);
   const bufferPercent = Math.max(0, 100 - (fabricPercent + accPercent + jasaPercent));
 
+  const statusStr = (item.status || item.Status || '').toLowerCase().trim();
+  const isConfirmed = statusStr === 'confirmed' || statusStr === 'approved' || statusStr === 'confirm';
+  const isRejected = statusStr === 'rejected' || statusStr === 'reject' || statusStr === 'revision';
+  const isPending = !isConfirmed && !isRejected;
+
   return (
     <div className="detail-page-container">
       {/* Top Navigation & Action Bar */}
@@ -96,26 +101,39 @@ export const PrecostingDetail = () => {
             <span>Cetak / PDF</span>
           </button>
 
-          {!(item.status === 'confirmed' || item.status === 'Approved') && (
-            <button 
-              type="button" 
-              className="btn-detail-action btn-detail-approve"
-              onClick={() => setApprovalModalItem(item)}
-            >
-              <CheckCircle size={15} />
-              <span>Approve Precosting</span>
-            </button>
+          {/* Action Approve & Reject hanya aktif jika status masih Pending */}
+          {isPending && (
+            <>
+              <button 
+                type="button" 
+                className="btn-detail-action btn-detail-approve"
+                onClick={() => setApprovalModalItem(item)}
+              >
+                <CheckCircle size={15} />
+                <span>Approve Precosting</span>
+              </button>
+
+              <button 
+                type="button" 
+                className="btn-detail-action btn-detail-reject"
+                onClick={() => setRejectModalItem(item)}
+              >
+                <XCircle size={15} />
+                <span>Reject Precosting</span>
+              </button>
+            </>
           )}
 
-          {!(item.status === 'reject' || item.status === 'rejected') && (
-            <button 
-              type="button" 
-              className="btn-detail-action btn-detail-reject"
-              onClick={() => setRejectModalItem(item)}
-            >
-              <XCircle size={15} />
-              <span>Reject Precosting</span>
-            </button>
+          {isConfirmed && (
+            <span className="badge badge-success" style={{ padding: '6px 12px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <CheckCircle size={14} /> Confirmed (Disetujui)
+            </span>
+          )}
+
+          {isRejected && (
+            <span className="badge badge-danger" style={{ padding: '6px 12px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <XCircle size={14} /> Rejected (Ditolak)
+            </span>
           )}
         </div>
       </div>
@@ -154,24 +172,24 @@ export const PrecostingDetail = () => {
               <span className="detail-precost-no font-mono">{item.precostingNo}</span>
               <span className="detail-item-code font-mono">{item.itemCode || '-'}</span>
               <div className="detail-status-pill">
-                {(item.status === 'confirmed' || item.status === 'Approved') && (
+                {isConfirmed && (
                   <span className="badge badge-success">
                     <CheckCircle size={13} className="badge-icon-left" /> Confirmed
                   </span>
                 )}
-                {item.status === 'Pending Approval' && (
+                {isPending && (
                   <span className="badge badge-warning">
-                    <Clock size={13} className="badge-icon-left" /> Menunggu Otorisasi
+                    <Clock size={13} className="badge-icon-left" /> Pending
                   </span>
                 )}
-                {(item.status === 'reject' || item.status === 'rejected' || item.status === 'Revision') && (
+                {isRejected && (
                   <span className="badge badge-danger">
                     <XCircle size={13} className="badge-icon-left" /> Rejected
                   </span>
                 )}
-                {item.status === 'Draft' && (
+                {!isConfirmed && !isPending && !isRejected && (
                   <span className="badge badge-secondary">
-                    Drafting
+                    {item.status || 'Draft'}
                   </span>
                 )}
               </div>
@@ -208,11 +226,11 @@ export const PrecostingDetail = () => {
         </div>
 
         {/* Approval info strip if approved */}
-        {(item.status === 'confirmed' || item.status === 'Approved') && (
+        {isConfirmed && (
           <div className="approved-info-banner">
             <ShieldCheck size={18} className="approved-banner-icon" />
             <div className="approved-banner-text">
-              <strong>Telah Dikonfirmasi (Approved) oleh:</strong> {item.approvedBy || 'Authorized Manager'}
+              <strong>Telah Dikonfirmasi (Confirmed) oleh:</strong> {item.approvedBy || 'Authorized Manager'}
               {(item.approvedDate || item.approvalDate) && ` pada ${item.approvedDate || item.approvalDate}`}
               {item.approvalNotes && (
                 <span className="approval-notes-quote"> — "{item.approvalNotes}"</span>
@@ -222,7 +240,7 @@ export const PrecostingDetail = () => {
         )}
 
         {/* Rejected info banner */}
-        {(item.status === 'reject' || item.status === 'rejected' || item.status === 'Revision') && (
+        {isRejected && (
           <div className="rejected-info-banner">
             <XCircle size={18} className="rejected-banner-icon" />
             <div className="rejected-banner-text">
@@ -754,7 +772,7 @@ export const PrecostingDetail = () => {
             <span>Tambah Remarks</span>
           </button>
 
-          {!(item.status === 'confirmed' || item.status === 'Approved') && (
+          {!isConfirmed && (
             <button
               type="button"
               className="btn-bottom-approve"
@@ -765,7 +783,7 @@ export const PrecostingDetail = () => {
             </button>
           )}
 
-          {!(item.status === 'reject' || item.status === 'rejected') && (
+          {!isRejected && (
             <button
               type="button"
               className="btn-bottom-reject"

@@ -9,8 +9,20 @@ export const garmentImageMap = {
   'PC-2026-006': '/images/jacket.jpg',
 };
 
+export const normalizeStatus = (val) => {
+  if (!val || typeof val !== 'string') return 'Pending';
+  const s = val.trim().toLowerCase();
+  if (s === 'confirmed' || s === 'confirm' || s === 'approved') return 'Confirmed';
+  if (s === 'rejected' || s === 'reject' || s === 'revision') return 'Rejected';
+  if (s === 'pending' || s === 'pending approval' || s === 'menunggu approval') return 'Pending';
+  return 'Pending';
+};
+
 export const calculatePrecostingTotals = (item) => {
   if (!item) return item;
+
+  const status = normalizeStatus(item.status || item.Status);
+  const sync_status = (item.sync_status || item.SyncStatus || item.syncStatus || 'pending').toLowerCase();
 
   // Image resolution (Base64 from database or fallback)
   const image = item.image || item.ProductImage || garmentImageMap[item.precostingNo] || '';
@@ -258,6 +270,10 @@ export const calculatePrecostingTotals = (item) => {
     accPrice: accCostPerPcs,
     hpp: hppPerPcs,
     taxPrice: ppnPerPcs,
+    status,
+    Status: status,
+    sync_status,
+    syncStatus: sync_status,
   };
 };
 

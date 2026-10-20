@@ -52,7 +52,7 @@ export const Header = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
 
         {/* Right Action Tools & User Profile */}
         <div className="header-actions">
-          <button 
+          {/* <button 
             type="button"
             className="btn-header-secondary" 
             onClick={() => setIsNewModalOpen(true)}
@@ -60,13 +60,13 @@ export const Header = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
           >
             <PlusCircle size={15} />
             <span className="btn-text">Tambah Precosting</span>
-          </button>
+          </button> */}
 
           {/* User profile dropdown / info */}
           {user && (
             <div className="user-profile-badge">
               <div className="avatar-circle">
-                {user.role === 'Approver' ? (
+                {user.role === 'Approver' || user.role?.toLowerCase().includes('direktur') || user.role?.toLowerCase().includes('management') ? (
                   <ShieldCheck size={16} className="avatar-role-icon" />
                 ) : (
                   <User size={16} />

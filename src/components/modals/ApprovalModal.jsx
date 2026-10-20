@@ -30,7 +30,10 @@ export const ApprovalModal = () => {
   if (!approvalModalItem) return null;
 
   const item = approvalModalItem;
-  const isAlreadyApproved = item.status === 'confirmed' || item.status === 'Approved';
+  const isAlreadyApproved = 
+    item.status === 'Confirmed' || 
+    item.status === 'confirmed' || 
+    item.status === 'Approved';
 
   const handleApprove = () => {
     approvePrecosting(item.id, approvalNotes);
@@ -233,30 +236,30 @@ export const ApprovalModal = () => {
             Batal
           </button>
 
-          {/* Button Reject */}
-          {!(item.status === 'reject' || item.status === 'rejected') && (
-            <button 
-              type="button" 
-              className="btn-modal-revision"
-              onClick={() => {
-                setRejectModalItem(item);
-              }}
-              title="Tolak Precosting & Tambahkan Remarks"
-            >
-              <XCircle size={15} />
-              <span>Reject</span>
-            </button>
-          )}
+          {/* Button Reject & Approve hanya tampil jika belum approved atau rejected */}
+          {!(isAlreadyApproved || item.status?.toLowerCase() === 'reject' || item.status?.toLowerCase() === 'rejected') && (
+            <>
+              <button 
+                type="button" 
+                className="btn-modal-revision"
+                onClick={() => {
+                  setRejectModalItem(item);
+                }}
+                title="Tolak Precosting & Tambahkan Remarks"
+              >
+                <XCircle size={15} />
+                <span>Reject</span>
+              </button>
 
-          {!(item.status === 'confirmed' || item.status === 'Approved') && (
-            <button 
-              type="button" 
-              className="btn-modal-confirm-approve"
-              onClick={handleApprove}
-            >
-              <CheckCircle size={16} />
-              <span>Konfirmasi & Approve</span>
-            </button>
+              <button 
+                type="button" 
+                className="btn-modal-confirm-approve"
+                onClick={handleApprove}
+              >
+                <CheckCircle size={16} />
+                <span>Konfirmasi & Approve</span>
+              </button>
+            </>
           )}
         </div>
       </div>

@@ -1,55 +1,98 @@
 import React, { useState } from 'react';
 import { usePrecosting } from '../../context/PrecostingContext';
-import { Scissors, User, Lock, Eye, EyeOff, UserCheck, ArrowRight } from 'lucide-react';
+import { precostingApi } from '../../services/api';
+import {
+  Scissors,
+  User,
+  Lock,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  ShieldCheck,
+  Terminal,
+  AlertCircle,
+  Database,
+  Loader2,
+  KeyRound,
+} from 'lucide-react';
 
 export const Login = () => {
   const { login } = usePrecosting();
 
-  const [username, setUsername] = useState('rina.kartika');
-  const [password, setPassword] = useState('costing123');
+  const [username, setUsername] = useState(() => {
+    return localStorage.getItem('cloth_saved_username') || 'management';
+  });
+  const [password, setPassword] = useState('.dma01');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const demoAccounts = [
+  // 2 Official User Accounts (Stored in PostgreSQL Database)
+  const registeredAccounts = [
     {
-      label: 'Merchandiser (Rina)',
-      name: 'Rina Kartika',
-      username: 'rina.kartika',
-      role: 'Merchandiser Lead',
+      id: 'usr-mgmt',
+      badge: 'Management',
+      username: 'management',
+      password: '.dma01',
+      name: 'Management',
+      role: 'Management',
+      type: 'management',
+      icon: ShieldCheck,
+      tooltip: 'Otorisasi & Approval Precosting',
     },
     {
-      label: 'Costing Eng. (Hendra)',
-      name: 'Hendra Saputra',
-      username: 'hendra.saputra',
-      role: 'Costing Specialist',
-    },
-    {
-      label: 'Approver (Budi)',
-      name: 'Budi Santoso',
-      username: 'budi.santoso',
-      role: 'Approver',
+      id: 'usr-dev',
+      badge: 'Akun Developer',
+      username: 'developer',
+      password: 'dev123',
+      name: 'Lead Developer',
+      role: 'System Administrator',
+      type: 'developer',
+      icon: Terminal,
+      tooltip: 'Akses Penuh Sistem & Konfigurasi',
     },
   ];
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!username.trim()) return;
+    if (!username.trim()) {
+      setErrorMessage('Harap masukkan username.');
+      return;
+    }
+    if (!password) {
+      setErrorMessage('Harap masukkan password.');
+      return;
+    }
 
-    const matched = demoAccounts.find(
-      (a) => a.username.toLowerCase() === username.trim().toLowerCase()
-    );
+    setIsLoading(true);
+    setErrorMessage('');
 
-    login({
-      id: `usr-${Date.now()}`,
-      name: matched ? matched.name : username.trim(),
-      username: username.trim(),
-      role: matched ? matched.role : 'Merchandiser',
-    });
+    try {
+      const res = await precostingApi.login(username.trim(), password);
+      if (res && res.success && res.data) {
+        if (rememberMe) {
+          localStorage.setItem('cloth_saved_username', username.trim());
+        } else {
+          localStorage.removeItem('cloth_saved_username');
+        }
+        login(res.data);
+      } else {
+        setErrorMessage(res?.message || 'Username atau password salah.');
+      }
+    } catch (err) {
+      setErrorMessage(
+        err.message || 'Gagal login. Periksa koneksi ke server PostgreSQL database.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleSelectDemo = (acc) => {
+  const handleSelectAccount = (acc) => {
     setUsername(acc.username);
-    setPassword('costing123');
+    setPassword(acc.password);
+    setErrorMessage('');
   };
 
   return (
@@ -66,7 +109,17 @@ export const Login = () => {
           </p>
         </div>
 
-        {/* Login Form with Styled Inputs */}
+        {/* Error Alert Banner */}
+        {errorMessage && (
+          <div className="login-alert-error" role="alert">
+            <AlertCircle size={16} className="login-alert-icon" />
+            <div className="login-alert-content">
+              <strong>Gagal Masuk:</strong> {errorMessage}
+            </div>
+          </div>
+        )}
+
+        {/* Login Form */}
         <form onSubmit={handleSubmit} className="simple-login-form">
           {/* Styled Username Field */}
           <div className="stylish-field-container">
@@ -83,9 +136,13 @@ export const Login = () => {
                 type="text"
                 className="stylish-clean-input"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Masukkan username Anda"
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  if (errorMessage) setErrorMessage('');
+                }}
+                placeholder="Masukkan username"
                 autoComplete="username"
+                disabled={isLoading}
                 required
               />
             </div>
@@ -98,14 +155,16 @@ export const Login = () => {
                 <Lock size={13} className="micro-icon" />
                 Password
               </span>
-              <button 
-                type="button" 
+              {/* <button
+                type="button"
                 className="link-forgot-pass"
-                onClick={() => alert('Password demo: costing123')}
+                onClick={() =>
+                  alert('Password akun:\n• Bos Besar (direktur): direktur123\n• Developer (developer): dev123')
+                }
                 tabIndex={-1}
               >
-                Lupa password?
-              </button>
+                Bantuan password?
+              </button> */}
             </div>
             <div className="field-input-row">
               <input
@@ -113,9 +172,13 @@ export const Login = () => {
                 type={showPassword ? 'text' : 'password'}
                 className="stylish-clean-input"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (errorMessage) setErrorMessage('');
+                }}
                 placeholder="••••••••"
                 autoComplete="current-password"
+                disabled={isLoading}
                 required
               />
               <button
@@ -139,42 +202,69 @@ export const Login = () => {
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
                 className="stylish-checkbox"
+                disabled={isLoading}
               />
-              <span>Ingat saya di perangkat ini</span>
+              <span>Ingat username saya</span>
             </label>
           </div>
 
           {/* Submit Button */}
-          <button type="submit" className="btn-simple-submit">
-            <span>Masuk ke Sistem</span>
-            <ArrowRight size={16} />
+          <button
+            type="submit"
+            className="btn-simple-submit"
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <>
+                <Loader2 size={16} className="spin-animation" />
+                <span>Memverifikasi Database...</span>
+              </>
+            ) : (
+              <>
+                <span>Masuk ke Sistem</span>
+                <ArrowRight size={16} />
+              </>
+            )}
           </button>
         </form>
 
-        {/* Clean Demo Role Switcher */}
-        <div className="simple-demo-section">
+        {/* Clean Database User Switcher */}
+        {/* <div className="simple-demo-section">
           <div className="simple-demo-label">
-            <UserCheck size={14} />
-            <span>Pilih akun demo cepat:</span>
+            <KeyRound size={13} />
+            <span>Pilih akun tersimpan (2 User Database):</span>
           </div>
           <div className="simple-demo-pills">
-            {demoAccounts.map((acc) => {
-              const isActive = username.toLowerCase() === acc.username.toLowerCase();
+            {registeredAccounts.map((acc) => {
+              const isActive =
+                username.trim().toLowerCase() === acc.username.toLowerCase();
+              const IconComponent = acc.icon;
               return (
                 <button
-                  key={acc.username}
+                  key={acc.id}
                   type="button"
                   className={`simple-demo-pill ${isActive ? 'is-active' : ''}`}
-                  onClick={() => handleSelectDemo(acc)}
-                  title={`Login sebagai ${acc.role} (${acc.username})`}
+                  onClick={() => handleSelectAccount(acc)}
+                  disabled={isLoading}
+                  title={`Pilih ${acc.name} (${acc.role})`}
                 >
-                  <span className="pill-username">{acc.username}</span>
-                  <span className="pill-role">{acc.role}</span>
+                  <div className="pill-left">
+                    <div className={`pill-avatar-icon is-${acc.type}`}>
+                      <IconComponent size={16} />
+                    </div>
+                    <div className="pill-text-group">
+                      <span className="pill-person-name">{acc.name}</span>
+                      <span className="pill-person-role">
+                        {acc.role} • <em>{acc.badge}</em>
+                      </span>
+                    </div>
+                  </div>
+                  <span className="pill-badge-tag">{acc.username}</span>
                 </button>
               );
             })}
           </div>
-        </div>
+        </div> */}
 
         {/* Footer */}
         <div className="simple-login-footer">
@@ -184,3 +274,4 @@ export const Login = () => {
     </div>
   );
 };
+
