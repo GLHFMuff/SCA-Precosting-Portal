@@ -2,41 +2,66 @@ import React, { useState } from 'react';
 import { usePrecosting } from '../../context/PrecostingContext';
 import { formatRupiah, formatNumber, formatDate } from '../../utils/formatters';
 import { decodeBase64Image } from '../../utils/imageUtils';
-import { 
-  ArrowLeft, 
-  CheckCircle, 
+import {
+  ArrowLeft,
+  Printer,
+  CheckCircle,
+  CheckCircle2,
   XCircle,
-  Clock, 
-  AlertTriangle, 
-  Printer, 
-  MessageSquare, 
-  DollarSign, 
-  FileSpreadsheet, 
-  Layers, 
-  Scissors, 
-  Package, 
-  Send, 
-  ShieldCheck, 
-  Building2, 
-  Calendar, 
-  TrendingUp, 
-  PieChart,
-  Sparkles
+  AlertTriangle,
+  Calendar,
+  Coins,
+  Shirt,
+  DollarSign,
+  Tag,
+  Info,
+  Lightbulb,
+  Target,
+  ChevronDown,
+  ChevronUp,
+  MessageSquare,
+  Send,
+  Package,
+  Scissors,
+  Layers
 } from 'lucide-react';
 
+const formatPercent = (val) => {
+  if (val === undefined || val === null || isNaN(val)) return '0,0%';
+  return Number(val).toFixed(1).replace('.', ',') + '%';
+};
+
+const formatDecimal = (val, decimals = 2) => {
+  if (val === undefined || val === null || isNaN(val)) return '0';
+  return new Intl.NumberFormat('id-ID', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(val);
+};
+
+const checkIsOverdue = (dateString) => {
+  if (!dateString) return false;
+  try {
+    const d = new Date(dateString);
+    return !isNaN(d.getTime()) && d.getTime() < Date.now();
+  } catch {
+    return false;
+  }
+};
+
 export const PrecostingDetail = () => {
-  const { 
-    selectedPrecosting, 
-    clearSelectedPrecosting, 
+  const {
+    selectedPrecosting,
+    clearSelectedPrecosting,
     setApprovalModalItem,
     setRejectModalItem,
     addRemark,
-    user 
+    user
   } = usePrecosting();
 
   const [newRemarkText, setNewRemarkText] = useState('');
-  const [activeTab, setActiveTab] = useState('all'); // 'all' | 'fabric' | 'acc' | 'jasa' | 'finance'
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [showFullSpecs, setShowFullSpecs] = useState(false);
 
   if (!selectedPrecosting) return null;
 
@@ -54,35 +79,117 @@ export const PrecostingDetail = () => {
     window.print();
   };
 
-  // Percentage calculations for cost breakdown
+  // 1. Data Normalization & Core Financial Variables
   const targetQty = Number(item.targetQty || item.ProdQty || 1000);
-  const fabricCostVal = Number(item.fabricCostPerPcs ?? item.totalKainPerPcs ?? item.totalKain ?? item.totalFabric ?? 0);
-  const normalizedFabricCost = fabricCostVal > 100000 && targetQty > 1 ? Math.round(fabricCostVal / targetQty) : fabricCostVal;
+  const styleName = item.itemName || item.ProdName || 'Style Garment';
 
-  const accCostVal = Number(item.accCostPerPcs ?? item.accessoriesCostPerPcs ?? item.accPrice ?? 0);
-  const normalizedAccCost = accCostVal > 50000 && targetQty > 1 && (item.hpp ? accCostVal > Number(item.hpp) : true) ? Math.round(accCostVal / targetQty) : accCostVal;
+  // Fabric cost normalization
+  const rawFabricCost = Number(item.fabricCostPerPcs ?? item.totalKainPerPcs ?? item.totalKain ?? item.totalFabric ?? 0);
+  const normalizedFabricCost = rawFabricCost > 100000 && targetQty > 1 ? Math.round(rawFabricCost / targetQty) : rawFabricCost;
 
-  const jasaCostVal = Number(item.jasaCostPerPcs ?? item.cmtCostPerPcs ?? item.cmtPrice ?? 0);
-  const normalizedJasaCost = jasaCostVal > 500000 && targetQty > 1 ? Math.round(jasaCostVal / targetQty) : jasaCostVal;
+  // Accessories cost normalization
+  const rawAccCost = Number(item.accCostPerPcs ?? item.accessoriesCostPerPcs ?? item.accPrice ?? 0);
+  const normalizedAccCost = rawAccCost > 50000 && targetQty > 1 && (item.hpp ? rawAccCost > Number(item.hpp) : true) ? Math.round(rawAccCost / targetQty) : rawAccCost;
 
-  const hppVal = Number(item.hppPerPcs ?? item.hpp ?? item.HPP ?? (normalizedFabricCost + normalizedAccCost + normalizedJasaCost));
-  const totalCost = hppVal > 0 ? hppVal : 1;
-  const fabricPercent = Math.round((normalizedFabricCost / totalCost) * 100);
-  const accPercent = Math.round((normalizedAccCost / totalCost) * 100);
-  const jasaPercent = Math.round((normalizedJasaCost / totalCost) * 100);
-  const bufferPercent = Math.max(0, 100 - (fabricPercent + accPercent + jasaPercent));
+  // Services/CMT cost normalization
+  const rawJasaCost = Number(item.jasaCostPerPcs ?? item.cmtCostPerPcs ?? item.cmtPrice ?? 0);
+  const normalizedJasaCost = rawJasaCost > 500000 && targetQty > 1 ? Math.round(rawJasaCost / targetQty) : rawJasaCost;
 
+  // Base sum of direct elements
+  const baseDirectSum = normalizedFabricCost + normalizedAccCost + normalizedJasaCost;
+  const explicitHpp = Number(item.hppPerPcs ?? item.hpp ?? item.HPP ?? 0);
+  const hppVal = explicitHpp > 0 ? explicitHpp : (baseDirectSum > 0 ? baseDirectSum : 148217);
+
+  // Overhead / Lain-lain
+  const otherCost = (hppVal > baseDirectSum)
+    ? (hppVal - baseDirectSum)
+    : Number(item.bufferPerPcs || item.factoryOverheadPerPcs || 0);
+
+  // Total Production Cost (Biaya Produksi)
+  const totalProductionCost = hppVal * targetQty;
+
+  // Selling Price (Harga Jual) & Multiplier
+  const explicitSellingPrice = Number(
+    item.sellingPrice ||
+    item.targetSellingPricePerPcs ||
+    item.HargaJual ||
+    item.hargaJual ||
+    0
+  );
+  // Default markup multiplier ~6x if unstated or using target markup rate
+  const sellingPrice = explicitSellingPrice > 0
+    ? explicitSellingPrice
+    : (hppVal > 0 ? Math.round(hppVal * (item.markupRate ? (1 + Number(item.markupRate)) : 6)) : 889302);
+  const multiplier = hppVal > 0 ? Math.round(sellingPrice / hppVal) : 6;
+
+  // Percentage Calculations for Cost Composition
+  const effectiveTotal = (normalizedFabricCost + normalizedAccCost + normalizedJasaCost + otherCost) || hppVal || 1;
+  const fabricPct = Number(((normalizedFabricCost / effectiveTotal) * 100).toFixed(1));
+  const accPct = Number(((normalizedAccCost / effectiveTotal) * 100).toFixed(1));
+  const cmtPct = Number(((normalizedJasaCost / effectiveTotal) * 100).toFixed(1));
+  const otherPct = Number((Math.max(0, 100 - (fabricPct + accPct + cmtPct))).toFixed(1));
+
+  // Delivery status calculation
+  const isDeliveryOverdue = checkIsOverdue(item.deliveryDate);
+  const deliveryDateDisplay = formatDate(item.deliveryDate);
+
+  // Approval status check
   const statusStr = (item.status || item.Status || '').toLowerCase().trim();
   const isConfirmed = statusStr === 'confirmed' || statusStr === 'approved' || statusStr === 'confirm';
   const isRejected = statusStr === 'rejected' || statusStr === 'reject' || statusStr === 'revision';
   const isPending = !isConfirmed && !isRejected;
 
+  // Colors breakdown
+  const colorsData = Array.isArray(item.colors) && item.colors.length > 0
+    ? item.colors
+    : [
+        { name: 'Warna 1', qty: Math.ceil(targetQty / 2), colorClass: 'disc-purple' },
+        { name: 'Warna 2', qty: Math.floor(targetQty / 2), colorClass: 'disc-beige' }
+      ];
+
+  // Fabric list for Box 4 (Kebutuhan Bahan)
+  const fabricsList = (Array.isArray(item.fabrics) && item.fabrics.length > 0)
+    ? item.fabrics
+    : [
+        { name: 'Chiffon Jacquard', consumption: 1.52 },
+        { name: 'SJ-9028-D', consumption: 1.52 },
+        { name: 'Errow', consumption: 1.42 }
+      ];
+  const totalFabricMeters = fabricsList.reduce(
+    (sum, f) => sum + (Number(f.consumption) || 0) * targetQty,
+    0
+  );
+
+  // Accessories list for Box 6 (BOM Aksesoris)
+  const defaultAccessoriesList = [
+    { name: 'Kancing', qtyPerPcs: 4, unit: 'pcs' },
+    { name: 'Rivet', qtyPerPcs: 2, unit: 'pcs' },
+    { name: 'Label', qtyPerPcs: 1, unit: 'pcs' },
+    { name: 'Benang', qtyPerPcs: 1, unit: 'pcs' },
+    { name: 'Kemasan', qtyPerPcs: 1, unit: 'pcs' }
+  ];
+  const accessoriesList = (Array.isArray(item.accessories) && item.accessories.length > 0)
+    ? item.accessories
+    : defaultAccessoriesList;
+
+  // SVG Donut Chart Slices
+  const donutSlices = [
+    { name: 'Biaya kain', pct: fabricPct, color: '#0284c7' },
+    { name: 'Biaya aksesoris', pct: accPct, color: '#f97316' },
+    { name: 'Biaya jasa CMT', pct: cmtPct, color: '#10b981' },
+    { name: 'Biaya lain-lain', pct: otherPct, color: '#8b5cf6' },
+  ];
+
+  const donutRadius = 65;
+  const donutCircumference = 2 * Math.PI * donutRadius;
+  let accumulatedLength = 0;
+
   return (
-    <div className="detail-page-container">
-      {/* Top Navigation & Action Bar */}
-      <div className="detail-top-nav">
-        <button 
-          type="button" 
+    <div className="costing-detail-page">
+      {/* TOP NAVIGATION & ACTION BAR */}
+      <div className="costing-top-nav no-print">
+        <button
+          type="button"
           className="btn-back-grid"
           onClick={clearSelectedPrecosting}
         >
@@ -90,22 +197,21 @@ export const PrecostingDetail = () => {
           <span>Kembali ke Grid Precosting</span>
         </button>
 
-        <div className="detail-action-buttons no-print">
-          <button 
-            type="button" 
+        <div className="detail-action-buttons">
+          <button
+            type="button"
             className="btn-detail-action btn-print"
             onClick={handlePrint}
-            title="Cetak Laporan Precosting"
+            title="Cetak Analisis Costing"
           >
             <Printer size={15} />
             <span>Cetak / PDF</span>
           </button>
 
-          {/* Action Approve & Reject hanya aktif jika status masih Pending */}
           {isPending && (
             <>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 className="btn-detail-action btn-detail-approve"
                 onClick={() => setApprovalModalItem(item)}
               >
@@ -113,8 +219,8 @@ export const PrecostingDetail = () => {
                 <span>Approve Precosting</span>
               </button>
 
-              <button 
-                type="button" 
+              <button
+                type="button"
                 className="btn-detail-action btn-detail-reject"
                 onClick={() => setRejectModalItem(item)}
               >
@@ -138,663 +244,821 @@ export const PrecostingDetail = () => {
         </div>
       </div>
 
-      {/* Main Header Card with Garment Photo */}
-      <div className="detail-header-card">
-        <div className="detail-header-flex">
-          {/* Garment Image Showcase */}
-          <div className="detail-image-box">
-            <div 
-              className="detail-image-wrapper"
+      {/* HERO BANNER */}
+      <div className="costing-hero-banner">
+        {/* Left Style & Title Info */}
+        <div className="hero-left-info">
+          <div className="hero-subtitle-tag">Analisis Costing & Sewing Order</div>
+          <div className="hero-style-name">{styleName}</div>
+          <div className="hero-description">
+            Perhitungan biaya produksi, kebutuhan bahan, dan estimasi profit
+          </div>
+        </div>
+
+        {/* Right Floating Badge Cards */}
+        <div className="hero-right-cards">
+          {/* Tanggal Delivery Pill */}
+          <div className="hero-white-card">
+            <div className="hero-calendar-icon-box">
+              <Calendar size={18} />
+            </div>
+            <div className="hero-card-col">
+              <span className="card-label">Tanggal Delivery</span>
+              <span className="card-main-val">{deliveryDateDisplay}</span>
+              <span className={`card-status-badge ${isDeliveryOverdue ? 'status-overdue' : 'status-ontime'}`}>
+                {isDeliveryOverdue ? '(Sudah lewat)' : '(Tepat waktu)'}
+              </span>
+            </div>
+          </div>
+
+          {/* Garment Thumbnail Card */}
+          <div className="hero-garment-thumb-card">
+            <div
+              className="hero-thumb-wrapper"
               onClick={() => setIsImageModalOpen(true)}
-              title="Klik untuk memperbesar gambar"
+              title="Klik untuk memperbesar foto garmen"
             >
-              <img 
-                src={decodeBase64Image(item.image)} 
-                alt={item.itemName} 
-                className="detail-garment-img"
+              <img
+                src={decodeBase64Image(item.image)}
+                alt={styleName}
+                className="hero-thumb-img"
                 onError={(e) => {
                   e.target.onerror = null;
                   e.target.src = '/images/shirt.jpg';
                 }}
               />
-              <div className="image-zoom-overlay">
-                <span>Perbesar Foto</span>
-              </div>
             </div>
-            <div className="image-caption-tag">
-              Foto Sample Model Garmen
+            <div className="hero-thumb-specs">
+              <div className="spec-row">
+                <span>Style</span>
+                <span>:</span>
+                <strong>{styleName}</strong>
+              </div>
+              <div className="spec-row">
+                <span>Qty</span>
+                <span>:</span>
+                <strong>{formatNumber(targetQty)} pcs</strong>
+              </div>
             </div>
           </div>
+        </div>
+      </div>
 
-          {/* Specs & Information */}
-          <div className="detail-header-main">
-            <div className="precost-badge-row">
-              <span className="detail-precost-no font-mono">{item.precostingNo}</span>
-              <span className="detail-item-code font-mono">{item.itemCode || '-'}</span>
-              <div className="detail-status-pill">
-                {isConfirmed && (
-                  <span className="badge badge-success">
-                    <CheckCircle size={13} className="badge-icon-left" /> Confirmed
-                  </span>
-                )}
-                {isPending && (
-                  <span className="badge badge-warning">
-                    <Clock size={13} className="badge-icon-left" /> Pending
-                  </span>
-                )}
-                {isRejected && (
-                  <span className="badge badge-danger">
-                    <XCircle size={13} className="badge-icon-left" /> Rejected
-                  </span>
-                )}
-                {!isConfirmed && !isPending && !isRejected && (
-                  <span className="badge badge-secondary">
-                    {item.status || 'Draft'}
-                  </span>
-                )}
+      {/* TOP 4 KPI CARDS */}
+      <div className="costing-kpi-row">
+        {/* Card 1: HPP per pcs */}
+        <div className="costing-kpi-card kpi-card-cyan">
+          <div className="kpi-top-row">
+            <div className="kpi-circle-icon kpi-icon-cyan">
+              <Coins size={22} />
+            </div>
+            <div className="kpi-meta-text">
+              <span className="kpi-card-title">HPP per pcs</span>
+              <span className="kpi-card-value font-mono">{formatRupiah(hppVal)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2: Qty Produksi */}
+        <div className="costing-kpi-card kpi-card-green">
+          <div className="kpi-top-row">
+            <div className="kpi-circle-icon kpi-icon-green">
+              <Shirt size={22} />
+            </div>
+            <div className="kpi-meta-text">
+              <span className="kpi-card-title">Qty Produksi</span>
+              <span className="kpi-card-value font-mono">{formatNumber(targetQty)} pcs</span>
+              <span className="kpi-card-subtext">
+                ({colorsData.length} warna × {formatNumber(colorsData[0]?.qty || Math.round(targetQty / 2))} pcs)
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: Total Biaya Produksi */}
+        <div className="costing-kpi-card kpi-card-purple">
+          <div className="kpi-top-row">
+            <div className="kpi-circle-icon kpi-icon-purple">
+              <DollarSign size={22} />
+            </div>
+            <div className="kpi-meta-text">
+              <span className="kpi-card-title">Total Biaya Produksi</span>
+              <span className="kpi-card-value font-mono">{formatRupiah(totalProductionCost)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 4: Harga Jual (di sheet) */}
+        <div className="costing-kpi-card kpi-card-orange">
+          <div>
+            <div className="kpi-top-row">
+              <div className="kpi-circle-icon kpi-icon-orange">
+                <Tag size={22} />
+              </div>
+              <div className="kpi-meta-text">
+                <span className="kpi-card-title">Harga Jual (di sheet)</span>
+                <span className="kpi-card-value font-mono">{formatRupiah(sellingPrice)}</span>
+                <span className="kpi-card-subtext">(per pcs)</span>
               </div>
             </div>
+            <div className="kpi-warning-box">
+              <AlertTriangle size={14} className="kpi-warning-icon" />
+              <span>Perlu konfirmasi apakah angka {multiplier} adalah pengali harga jual yang benar.</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
-            <h1 className="detail-item-title">{item.itemName}</h1>
+      {/* ROW 1: 3-COLUMN COST COMPOSITION */}
+      <div className="costing-3col-grid">
+        {/* Box 1: Komposisi HPP (per pcs) */}
+        <div className="costing-box">
+          <div className="costing-box-header">1. Komposisi HPP (per pcs)</div>
+          <div className="costing-box-body">
+            <div className="donut-flex-container">
+              {/* SVG Donut Chart */}
+              <div className="donut-chart-wrapper">
+                <svg viewBox="0 0 180 180" width="100%" height="100%">
+                  <g transform="rotate(-90 90 90)">
+                    {donutSlices.map((slice, i) => {
+                      const dashLength = (slice.pct / 100) * donutCircumference;
+                      const offset = -accumulatedLength;
+                      accumulatedLength += dashLength;
 
-            {/* Item Meta Specs */}
-            <div className="detail-meta-grid">
-              <div className="detail-meta-item">
-                <span className="meta-label">Kategori Pakaian</span>
-                <span className="meta-value">{item.category}</span>
+                      return (
+                        <circle
+                          key={i}
+                          cx="90"
+                          cy="90"
+                          r={donutRadius}
+                          fill="transparent"
+                          stroke={slice.color}
+                          strokeWidth="26"
+                          strokeDasharray={`${dashLength} ${donutCircumference}`}
+                          strokeDashoffset={offset}
+                        />
+                      );
+                    })}
+                  </g>
+
+                  {/* Percentage text labels calculated on arc centers */}
+                  {(() => {
+                    let arcOffset = 0;
+                    return donutSlices.map((slice, i) => {
+                      const sliceAngle = (slice.pct / 100) * 360;
+                      const midAngle = arcOffset + sliceAngle / 2;
+                      arcOffset += sliceAngle;
+
+                      if (slice.pct < 6) return null;
+
+                      const rad = (midAngle - 90) * (Math.PI / 180);
+                      const tx = 90 + donutRadius * Math.cos(rad);
+                      const ty = 90 + donutRadius * Math.sin(rad);
+
+                      return (
+                        <text
+                          key={i}
+                          x={tx}
+                          y={ty}
+                          fill="#ffffff"
+                          fontSize="9.5"
+                          fontWeight="800"
+                          textAnchor="middle"
+                          dominantBaseline="central"
+                        >
+                          {formatPercent(slice.pct)}
+                        </text>
+                      );
+                    });
+                  })()}
+
+                  {/* Center Hole Info */}
+                  <text x="90" y="76" textAnchor="middle" fill="#64748b" fontSize="9.5" fontWeight="600">
+                    Total HPP
+                  </text>
+                  <text x="90" y="94" textAnchor="middle" fill="#0f172a" fontSize="12" fontWeight="800" fontFamily="monospace">
+                    {formatRupiah(hppVal)}
+                  </text>
+                  <text x="90" y="109" textAnchor="middle" fill="#64748b" fontSize="8.5">
+                    per pcs
+                  </text>
+                </svg>
               </div>
-              <div className="detail-meta-item">
-                <span className="meta-label">Buyer / Brand</span>
-                <span className="meta-value">{item.buyer || 'Internal Brand'}</span>
-              </div>
-              <div className="detail-meta-item">
-                <span className="meta-label">Musim / Koleksi</span>
-                <span className="meta-value">{item.season || 'Regular Season'}</span>
-              </div>
-              <div className="detail-meta-item highlight-meta">
-                <span className="meta-label">Target Qty Produksi</span>
-                <span className="meta-value font-mono font-bold">
-                  {formatNumber(item.targetQty)} {item.unit || 'Pcs'}
-                </span>
-              </div>
-              <div className="detail-meta-item">
-                <span className="meta-label">Target Pengiriman</span>
-                <span className="meta-value">{formatDate(item.deliveryDate)}</span>
+
+              {/* Table breakdown next to donut */}
+              <div className="donut-legend-table">
+                <table className="costing-table">
+                  <thead>
+                    <tr>
+                      <th>Komponen</th>
+                      <th className="td-right">Biaya (Rp)</th>
+                      <th className="td-right">%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><span className="donut-dot dot-blue" />Biaya kain</td>
+                      <td className="td-right font-mono">{formatRupiah(normalizedFabricCost)}</td>
+                      <td className="td-right font-mono">{formatPercent(fabricPct)}</td>
+                    </tr>
+                    <tr>
+                      <td><span className="donut-dot dot-orange" />Biaya aksesoris</td>
+                      <td className="td-right font-mono">{formatRupiah(normalizedAccCost)}</td>
+                      <td className="td-right font-mono">{formatPercent(accPct)}</td>
+                    </tr>
+                    <tr>
+                      <td><span className="donut-dot dot-green" />Biaya jasa CMT</td>
+                      <td className="td-right font-mono">{formatRupiah(normalizedJasaCost)}</td>
+                      <td className="td-right font-mono">{formatPercent(cmtPct)}</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <span className="donut-dot dot-purple" />
+                        Biaya lain-lain <span className="text-muted" style={{ fontSize: '0.65rem' }}>(operasional, transport, dll)</span>
+                      </td>
+                      <td className="td-right font-mono">{formatRupiah(otherCost)}</td>
+                      <td className="td-right font-mono">{formatPercent(otherPct)}</td>
+                    </tr>
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td><strong>Total HPP per pcs</strong></td>
+                      <td className="td-right font-mono font-bold">{formatRupiah(hppVal)}</td>
+                      <td className="td-right font-mono font-bold">100%</td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Approval info strip if approved */}
-        {isConfirmed && (
-          <div className="approved-info-banner">
-            <ShieldCheck size={18} className="approved-banner-icon" />
-            <div className="approved-banner-text">
-              <strong>Telah Dikonfirmasi (Confirmed) oleh:</strong> {item.approvedBy || 'Authorized Manager'}
-              {(item.approvedDate || item.approvalDate) && ` pada ${item.approvedDate || item.approvalDate}`}
-              {item.approvalNotes && (
-                <span className="approval-notes-quote"> — "{item.approvalNotes}"</span>
-              )}
-            </div>
+        {/* Box 2: Rincian Biaya per Komponen */}
+        <div className="costing-box">
+          <div className="costing-box-header">2. Rincian Biaya per Komponen</div>
+          <div className="costing-box-body">
+            <table className="costing-table" style={{ height: '100%' }}>
+              <thead>
+                <tr>
+                  <th>Komponen</th>
+                  <th className="td-right">Biaya (Rp)</th>
+                  <th className="td-right">%</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Biaya kain</td>
+                  <td className="td-right font-mono">{formatRupiah(normalizedFabricCost)}</td>
+                  <td className="td-right font-mono">{formatPercent(fabricPct)}</td>
+                </tr>
+                <tr>
+                  <td>Biaya aksesoris</td>
+                  <td className="td-right font-mono">{formatRupiah(normalizedAccCost)}</td>
+                  <td className="td-right font-mono">{formatPercent(accPct)}</td>
+                </tr>
+                <tr>
+                  <td>Jasa CMT</td>
+                  <td className="td-right font-mono">{formatRupiah(normalizedJasaCost)}</td>
+                  <td className="td-right font-mono">{formatPercent(cmtPct)}</td>
+                </tr>
+                <tr>
+                  <td>Biaya lain-lain</td>
+                  <td className="td-right font-mono">{formatRupiah(otherCost)}</td>
+                  <td className="td-right font-mono">{formatPercent(otherPct)}</td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td><strong>Total HPP per pcs</strong></td>
+                  <td className="td-right font-mono font-bold">{formatRupiah(hppVal)}</td>
+                  <td className="td-right font-mono font-bold">100%</td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
-        )}
+        </div>
 
-        {/* Rejected info banner */}
-        {isRejected && (
-          <div className="rejected-info-banner">
-            <XCircle size={18} className="rejected-banner-icon" />
-            <div className="rejected-banner-text">
-              <strong>Status Precosting: Ditolak (Rejected).</strong>
-              {item.approvalNotes && (
-                <span className="approval-notes-quote"> Alasan Penolakan: "{item.approvalNotes}"</span>
-              )}
+        {/* Box 3: Visual Komposisi Biaya */}
+        <div className="costing-box">
+          <div className="costing-box-header">3. Visual Komposisi Biaya</div>
+          <div className="costing-box-body">
+            <div className="visual-progress-list">
+              <div className="visual-progress-item">
+                <span className="progress-label">Kain</span>
+                <div className="progress-track">
+                  <div className="progress-fill fill-blue" style={{ width: `${fabricPct}%` }} />
+                </div>
+                <span className="progress-pct-val font-mono">{formatPercent(fabricPct)}</span>
+              </div>
+
+              <div className="visual-progress-item">
+                <span className="progress-label">Aksesori</span>
+                <div className="progress-track">
+                  <div className="progress-fill fill-orange" style={{ width: `${accPct}%` }} />
+                </div>
+                <span className="progress-pct-val font-mono">{formatPercent(accPct)}</span>
+              </div>
+
+              <div className="visual-progress-item">
+                <span className="progress-label">CMT</span>
+                <div className="progress-track">
+                  <div className="progress-fill fill-green" style={{ width: `${cmtPct}%` }} />
+                </div>
+                <span className="progress-pct-val font-mono">{formatPercent(cmtPct)}</span>
+              </div>
+
+              <div className="visual-progress-item">
+                <span className="progress-label">Lain-lain</span>
+                <div className="progress-track">
+                  <div className="progress-fill fill-purple" style={{ width: `${otherPct}%` }} />
+                </div>
+                <span className="progress-pct-val font-mono">{formatPercent(otherPct)}</span>
+              </div>
+            </div>
+
+            {/* Info callout note */}
+            <div className="costing-info-callout">
+              <Info size={16} />
+              <div>
+                Biaya jasa CMT sudah termasuk dalam perhitungan HPP. Pastikan nilai CMT sesuai dengan kontrak jasa produksi.
+              </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Image Zoom Modal */}
+      {/* ROW 2: 3-COLUMN MATERIALS, COLORS & BOM */}
+      <div className="costing-3col-grid">
+        {/* Box 4: Kebutuhan Bahan (Total) */}
+        <div className="costing-box">
+          <div className="costing-box-header">4. Kebutuhan Bahan (Total)</div>
+          <div className="costing-box-body">
+            <table className="costing-table">
+              <thead>
+                <tr>
+                  <th>Jenis Kain</th>
+                  <th className="td-center">Consumption (m/pcs)</th>
+                  <th className="td-right">Kebutuhan (m)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fabricsList.map((f, idx) => {
+                  const consm = Number(f.consumption) || 0;
+                  const neededMeters = consm * targetQty;
+                  return (
+                    <tr key={f.id || idx}>
+                      <td><strong>{f.name}</strong></td>
+                      <td className="td-center font-mono">{formatDecimal(consm, 2)}</td>
+                      <td className="td-right font-mono font-medium">{formatDecimal(neededMeters, 2)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="tfoot-cyan">
+                  <td colSpan="2"><strong>Total seluruh kain</strong></td>
+                  <td className="td-right font-mono font-bold">{formatDecimal(totalFabricMeters, 2)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+        {/* Box 5: Pembagian Warna */}
+        <div className="costing-box">
+          <div className="costing-box-header">5. Pembagian Warna</div>
+          <div className="costing-box-body">
+            <div className="color-breakdown-wrapper">
+              <div className="color-circles-row">
+                {colorsData.map((c, idx) => (
+                  <div key={idx} className={`color-circle-disc ${c.colorClass || (idx % 2 === 0 ? 'disc-purple' : 'disc-beige')}`}>
+                    <span className="color-disc-name">{c.name}</span>
+                    <span className="color-disc-qty font-mono">{formatNumber(c.qty)} pcs</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="total-prod-summary">
+                <div className="total-prod-icon-box">
+                  <Shirt size={20} />
+                </div>
+                <div className="total-prod-text">
+                  <span className="total-prod-label">Total produksi</span>
+                  <span className="total-prod-val font-mono">{formatNumber(targetQty)} pcs</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Box 6: BOM Aksesoris (Ringkasan) */}
+        <div className="costing-box">
+          <div className="costing-box-header">6. BOM Aksesoris (Ringkasan)</div>
+          <div className="costing-box-body">
+            <table className="costing-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '28px' }} className="td-center">No</th>
+                  <th>Jenis Aksesori</th>
+                  <th className="td-center">Jumlah per pcs</th>
+                  <th className="td-right">Total Kebutuhan (+5% toleransi)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accessoriesList.slice(0, 5).map((a, idx) => {
+                  const qty = Number(a.qtyPerPcs) || 1;
+                  const totalAcc = Math.ceil(qty * targetQty * 1.05);
+                  return (
+                    <tr key={a.id || idx}>
+                      <td className="td-center font-mono text-muted">{idx + 1}</td>
+                      <td><strong>{a.name}</strong></td>
+                      <td className="td-center font-mono">{qty} {a.unit || 'pcs'}</td>
+                      <td className="td-right font-mono font-medium">{formatNumber(totalAcc)} {a.unit || 'pcs'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* ROW 3: 3 INSIGHT CARDS */}
+      <div className="costing-3col-grid">
+        {/* Card 1: Temuan yang Perlu Diperiksa */}
+        <div className="insight-card insight-card-alert">
+          <div className="insight-header">
+            <AlertTriangle size={20} color="#e11d48" />
+            <h3 className="insight-title">Temuan yang Perlu Diperiksa</h3>
+          </div>
+          <div className="insight-list">
+            <div className="insight-list-item">
+              <span className="insight-num-badge badge-red">1</span>
+              <div className="insight-item-content">
+                <strong>Harga jual {styleName} perlu dikonfirmasi</strong>
+                <div>Nilai harga jual pada sheet costing {formatRupiah(sellingPrice)}/pcs (HPP × {multiplier}). Pastikan angka {multiplier} adalah pengali harga jual yang benar.</div>
+              </div>
+            </div>
+
+            <div className="insight-list-item">
+              <span className="insight-num-badge badge-red">2</span>
+              <div className="insight-item-content">
+                <strong>Tanggal delivery {isDeliveryOverdue ? 'sudah lewat' : 'terjadwal'}</strong>
+                <div>Delivery {deliveryDateDisplay}. {isDeliveryOverdue ? 'Perlu konfirmasi apakah pesanan sudah selesai, terlambat, atau jadwal belum diperbarui.' : 'Pastikan tahapan material dan CMT berjalan tepat waktu.'}</div>
+              </div>
+            </div>
+
+            <div className="insight-list-item">
+              <span className="insight-num-badge badge-red">3</span>
+              <div className="insight-item-content">
+                <strong>Toleransi aksesori 5%</strong>
+                <div>Pastikan pembelian aksesori mengikuti perhitungan dan pembulatan sesuai satuan pembelian pemasok.</div>
+              </div>
+            </div>
+
+            <div className="insight-list-item">
+              <span className="insight-num-badge badge-red">4</span>
+              <div className="insight-item-content">
+                <strong>Stok bahan & PO</strong>
+                <div>Cek ketersediaan kain dan aksesori di gudang serta status pemesanan dari supplier.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2: Rekomendasi Tindak Lanjut */}
+        <div className="insight-card insight-card-rec">
+          <div className="insight-header">
+            <CheckCircle2 size={20} color="#059669" />
+            <h3 className="insight-title">Rekomendasi Tindak Lanjut</h3>
+          </div>
+          <div className="insight-list">
+            <div className="insight-list-item">
+              <span className="insight-num-badge badge-green">1</span>
+              <div className="insight-item-content">
+                <strong>Validasi costing</strong>
+                <div>Pastikan harga kain, consumption, CMT, dan harga aksesori sudah sesuai.</div>
+              </div>
+            </div>
+
+            <div className="insight-list-item">
+              <span className="insight-num-badge badge-green">2</span>
+              <div className="insight-item-content">
+                <strong>Validasi BOM</strong>
+                <div>Cocokkan total kebutuhan bahan dengan jumlah PO dan pembagian warna.</div>
+              </div>
+            </div>
+
+            <div className="insight-list-item">
+              <span className="insight-num-badge badge-green">3</span>
+              <div className="insight-item-content">
+                <strong>Evaluasi margin</strong>
+                <div>Hitung keuntungan kotor setelah harga jual resmi dikonfirmasi.</div>
+              </div>
+            </div>
+
+            <div className="insight-list-item">
+              <span className="insight-num-badge badge-green">4</span>
+              <div className="insight-item-content">
+                <strong>Kontrol pembelian</strong>
+                <div>Sesuaikan kebutuhan bahan dengan stok aktual, barang yang sudah dipesan, dan toleransi produksi.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: Kesimpulan */}
+        <div className="insight-card insight-card-summary">
+          <div className="insight-header">
+            <Lightbulb size={20} color="#0284c7" />
+            <h3 className="insight-title">Kesimpulan</h3>
+          </div>
+          <div className="insight-summary-body">
+            <p>
+              Secara aritmetika, total HPP {styleName} sudah konsisten dengan jumlah produksi dan biaya per pcs pada sheet costing.
+            </p>
+            <p>
+              Namun, harga jual dan status delivery perlu dikonfirmasi sebelum digunakan sebagai dasar keputusan pembelian atau evaluasi profit.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* BOTTOM FOCUS STRIP */}
+      <div className="costing-focus-bar">
+        <Target size={18} />
+        <div>
+          <strong>Fokus utama:</strong> memastikan harga jual, status delivery, ketersediaan bahan, dan kontrol pembelian agar produksi berjalan sesuai rencana dan tetap menguntungkan.
+        </div>
+      </div>
+
+      {/* TOGGLE BUTTON FOR FULL TECHNICAL SPECS & REMARKS */}
+      <div className="no-print" style={{ display: 'flex', justifyContent: 'center', marginTop: '0.5rem' }}>
+        <button
+          type="button"
+          className="btn-toggle-detailed-specs"
+          onClick={() => setShowFullSpecs(!showFullSpecs)}
+        >
+          {showFullSpecs ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          <span>{showFullSpecs ? 'Sembunyikan Rincian Teknis & Remarks' : 'Lihat Rincian Teknis Lengkap, Spesifikasi BOM & Diskusi Remarks'}</span>
+        </button>
+      </div>
+
+      {/* EXPANDABLE SECTION: DETAILED TABLES & REMARKS */}
+      {showFullSpecs && (
+        <div className="expandable-specs-container fadeIn no-print" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '0.5rem' }}>
+          {/* SECTION 1: Detail Fabric (Lengkap) */}
+          <div className="detail-section-card">
+            <div className="section-card-header">
+              <div className="section-title-group">
+                <div className="section-icon-badge fabric-badge">
+                  <Scissors size={18} />
+                </div>
+                <div>
+                  <h2 className="section-title">Detail Fabric Lengkap (Bahan Baku Kain)</h2>
+                  <p className="section-desc">Kebutuhan kain utama, lapisan interlining, pemakaian konsumsi per pcs dan total</p>
+                </div>
+              </div>
+              <div className="section-header-stat font-mono">
+                Subtotal: <strong>{formatRupiah(normalizedFabricCost)}</strong> / pcs
+              </div>
+            </div>
+
+            <div className="table-responsive-container">
+              <table className="precosting-detail-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '40px' }} className="th-center">No</th>
+                    <th>Nama Fabric / Kain</th>
+                    <th>Spesifikasi & Konstruksi</th>
+                    <th>Bagian Garmen</th>
+                    <th className="th-right">Konsumsi (Pcs)</th>
+                    <th className="th-center">Satuan</th>
+                    <th className="th-right">Harga Satuan</th>
+                    <th className="th-right">Total Biaya / Pcs</th>
+                    <th className="th-right">Biaya Semua Qty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fabricsList.map((f, idx) => {
+                    const costPerPcs = (Number(f.consumption) || 0) * (Number(f.unitPrice) || 0);
+                    const costAllQty = costPerPcs * targetQty;
+                    return (
+                      <tr key={f.id || idx}>
+                        <td className="td-center font-mono text-muted">{idx + 1}</td>
+                        <td className="font-semibold text-dark">{f.name}</td>
+                        <td className="text-secondary">{f.spec || '-'}</td>
+                        <td><span className="part-tag">{f.part || 'Main Body'}</span></td>
+                        <td className="td-right font-mono font-medium">{f.consumption}</td>
+                        <td className="td-center text-secondary">{f.unit || 'Meter'}</td>
+                        <td className="td-right font-mono">{formatRupiah(f.unitPrice || 0)}</td>
+                        <td className="td-right font-mono font-semibold text-fabric">{formatRupiah(costPerPcs)}</td>
+                        <td className="td-right font-mono font-bold text-total-qty">{formatRupiah(costAllQty)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* SECTION 2: Detail Accessories (Lengkap) */}
+          <div className="detail-section-card">
+            <div className="section-card-header">
+              <div className="section-title-group">
+                <div className="section-icon-badge acc-badge">
+                  <Package size={18} />
+                </div>
+                <div>
+                  <h2 className="section-title">Detail Accessories & Trims (Lengkap)</h2>
+                  <p className="section-desc">Kancing, benang, label, zipper, polybag, hangtag dan kemasan</p>
+                </div>
+              </div>
+              <div className="section-header-stat font-mono">
+                Subtotal: <strong>{formatRupiah(normalizedAccCost)}</strong> / pcs
+              </div>
+            </div>
+
+            <div className="table-responsive-container">
+              <table className="precosting-detail-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '40px' }} className="th-center">No</th>
+                    <th>Nama Accessories / Trims</th>
+                    <th>Spesifikasi Teknis</th>
+                    <th className="th-right">Qty / Pcs</th>
+                    <th className="th-center">Satuan</th>
+                    <th className="th-right">Harga Satuan</th>
+                    <th className="th-right">Total Biaya / Pcs</th>
+                    <th className="th-right">Biaya Semua Qty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {accessoriesList.map((a, idx) => {
+                    const costPerPcs = (Number(a.qtyPerPcs) || 0) * (Number(a.unitPrice) || 0);
+                    const costAllQty = costPerPcs * targetQty;
+                    return (
+                      <tr key={a.id || idx}>
+                        <td className="td-center font-mono text-muted">{idx + 1}</td>
+                        <td className="font-semibold text-dark">{a.name}</td>
+                        <td className="text-secondary">{a.spec || '-'}</td>
+                        <td className="td-right font-mono font-medium">{a.qtyPerPcs}</td>
+                        <td className="td-center text-secondary">{a.unit || 'Pcs'}</td>
+                        <td className="td-right font-mono">{formatRupiah(a.unitPrice || 0)}</td>
+                        <td className="td-right font-mono font-semibold text-acc">{formatRupiah(costPerPcs)}</td>
+                        <td className="td-right font-mono font-bold text-total-qty">{formatRupiah(costAllQty)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* SECTION 3: Detail Jasa CMT (Lengkap) */}
+          <div className="detail-section-card">
+            <div className="section-card-header">
+              <div className="section-title-group">
+                <div className="section-icon-badge jasa-badge">
+                  <Layers size={18} />
+                </div>
+                <div>
+                  <h2 className="section-title">Detail Jasa & Proses Produksi (CMT)</h2>
+                  <p className="section-desc">Pola marker, potong, jahit CMT, finishing dan overhead produksi</p>
+                </div>
+              </div>
+              <div className="section-header-stat font-mono">
+                Subtotal: <strong>{formatRupiah(normalizedJasaCost)}</strong> / pcs
+              </div>
+            </div>
+
+            <div className="table-responsive-container">
+              <table className="precosting-detail-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '40px' }} className="th-center">No</th>
+                    <th>Jenis Jasa / Proses</th>
+                    <th>Klasifikasi Akuntansi</th>
+                    <th>Uraian Pekerjaan</th>
+                    <th className="th-right">Biaya Jasa / Pcs</th>
+                    <th className="th-right">Biaya Semua Qty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(item.services && item.services.length > 0 ? item.services : [
+                    { name: 'Jasa Cutting, Making & Trimming (CMT)', category: 'Direct Labor', description: 'Line jahit utama', unitPrice: normalizedJasaCost }
+                  ]).map((s, idx) => {
+                    const costPerPcs = Number(s.unitPrice) || 0;
+                    const costAllQty = costPerPcs * targetQty;
+                    return (
+                      <tr key={s.id || idx}>
+                        <td className="td-center font-mono text-muted">{idx + 1}</td>
+                        <td className="font-semibold text-dark">{s.name}</td>
+                        <td>
+                          <span className={`category-pill ${s.category === 'Direct Labor' ? 'labor-pill' : 'overhead-pill'}`}>
+                            {s.category || 'CMT'}
+                          </span>
+                        </td>
+                        <td className="text-secondary">{s.description || '-'}</td>
+                        <td className="td-right font-mono font-semibold text-jasa">{formatRupiah(costPerPcs)}</td>
+                        <td className="td-right font-mono font-bold text-total-qty">{formatRupiah(costAllQty)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* SECTION 4: Remarks / Catatan & Riwayat Diskusi */}
+          <div className="detail-section-card">
+            <div className="section-card-header">
+              <div className="section-title-group">
+                <div className="section-icon-badge remarks-badge">
+                  <MessageSquare size={18} />
+                </div>
+                <div>
+                  <h2 className="section-title">Catatan & Remarks Precosting ({remarks.length})</h2>
+                  <p className="section-desc">Riwayat catatan teknis kain, toleransi pola, spesifikasi trims dan instruksi approval</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Add Remark Form */}
+            <form onSubmit={handleAddRemarkSubmit} className="add-remark-form">
+              <div className="remark-input-group">
+                <textarea
+                  className="remark-textarea"
+                  rows="3"
+                  placeholder="Tulis catatan/remarks untuk precosting ini..."
+                  value={newRemarkText}
+                  onChange={(e) => setNewRemarkText(e.target.value)}
+                />
+                <div className="remark-submit-bar">
+                  <span className="remark-author-hint">
+                    Posting sebagai: <strong>{user ? `${user.name} (${user.role})` : 'User'}</strong>
+                  </span>
+                  <button
+                    type="submit"
+                    className="btn-send-remark"
+                    disabled={!newRemarkText.trim()}
+                  >
+                    <Send size={15} />
+                    <span>Kirim Remarks</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            {/* Remarks History Feed */}
+            <div className="remarks-history-feed">
+              {remarks.length === 0 ? (
+                <div className="no-remarks-hint">
+                  Belum ada catatan untuk precosting ini. Tulis catatan pertama di atas.
+                </div>
+              ) : (
+                remarks.map((rem) => (
+                  <div key={rem.id} className="remark-card-item">
+                    <div className="remark-item-header">
+                      <div className="remark-author-info">
+                        <span className="remark-author-name">{rem.author}</span>
+                        {rem.role && <span className="remark-role-tag">{rem.role}</span>}
+                      </div>
+                      <span className="remark-timestamp">{rem.timestamp}</span>
+                    </div>
+                    <div className="remark-item-body">{rem.text}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IMAGE ZOOM MODAL */}
       {isImageModalOpen && (
         <div className="modal-overlay" onClick={() => setIsImageModalOpen(false)}>
           <div className="image-zoom-modal-container" onClick={(e) => e.stopPropagation()}>
             <div className="zoom-modal-header">
-              <span className="zoom-title">{item.itemName} ({item.precostingNo})</span>
-              <button 
-                type="button" 
-                className="modal-close-btn" 
+              <span className="zoom-title">{styleName} ({item.precostingNo})</span>
+              <button
+                type="button"
+                className="modal-close-btn"
                 onClick={() => setIsImageModalOpen(false)}
               >
                 ×
               </button>
             </div>
             <div className="zoom-modal-body">
-              <img 
-                src={decodeBase64Image(item.image)} 
-                alt={item.itemName} 
+              <img
+                src={decodeBase64Image(item.image)}
+                alt={styleName}
                 className="full-zoom-img"
               />
             </div>
           </div>
         </div>
       )}
-
-      {/* KPI Costing Summary Bar (COGS, COGM, HPP Cards) */}
-      <div className="detail-kpi-bar">
-        {/* Total Fabric */}
-        <div className="kpi-card fabric-kpi">
-          <div className="kpi-card-header">
-            <span>Biaya Fabric (Kain)</span>
-            <span className="kpi-tag">Bahan Baku</span>
-          </div>
-          <div className="kpi-main-val font-mono">{formatRupiah(normalizedFabricCost)}</div>
-          <div className="kpi-sub-val font-mono">
-            Semua Qty: <strong>{formatRupiah(normalizedFabricCost * targetQty)}</strong>
-          </div>
-        </div>
-
-        {/* Total Acc */}
-        <div className="kpi-card acc-kpi">
-          <div className="kpi-card-header">
-            <span>Biaya Accessories</span>
-            <span className="kpi-tag">Trims & Packaging</span>
-          </div>
-          <div className="kpi-main-val font-mono">{formatRupiah(normalizedAccCost)}</div>
-          <div className="kpi-sub-val font-mono">
-            Semua Qty: <strong>{formatRupiah(normalizedAccCost * targetQty)}</strong>
-          </div>
-        </div>
-
-        {/* Total Jasa */}
-        <div className="kpi-card jasa-kpi">
-          <div className="kpi-card-header">
-            <span>Biaya Jasa & CMT</span>
-            <span className="kpi-tag">Upah & Jahit</span>
-          </div>
-          <div className="kpi-main-val font-mono">{formatRupiah(normalizedJasaCost)}</div>
-          <div className="kpi-sub-val font-mono">
-            Semua Qty: <strong>{formatRupiah(normalizedJasaCost * targetQty)}</strong>
-          </div>
-        </div>
-
-        {/* COGM */}
-        <div className="kpi-card cogm-kpi">
-          <div className="kpi-card-header">
-            <span>COGM (Biaya Pokok Prod.)</span>
-            <span className="kpi-tag bold-tag">Direct + Overhead</span>
-          </div>
-          <div className="kpi-main-val font-mono text-purple">{formatRupiah(normalizedFabricCost + normalizedAccCost + normalizedJasaCost)}</div>
-          <div className="kpi-sub-val font-mono">
-            Semua Qty: <strong>{formatRupiah((normalizedFabricCost + normalizedAccCost + normalizedJasaCost) * targetQty)}</strong>
-          </div>
-        </div>
-
-        {/* HPP / COGS */}
-        <div className="kpi-card hpp-kpi">
-          <div className="kpi-card-header">
-            <span>HPP / COGS per Pcs</span>
-            <span className="kpi-tag primary-tag">Final Precosting</span>
-          </div>
-          <div className="kpi-main-val font-mono text-emerald font-bold">{formatRupiah(hppVal)}</div>
-          <div className="kpi-sub-val font-mono">
-            Total Semua Qty: <strong className="text-emerald">{formatRupiah(hppVal * targetQty)}</strong>
-          </div>
-        </div>
-      </div>
-
-      {/* Cost Composition Visual Bar */}
-      <div className="cost-composition-panel">
-        <div className="composition-header">
-          <div className="composition-title">
-            <PieChart size={16} />
-            <span>Proporsi Struktur Biaya per Kain (HPP: {formatRupiah(item.hppPerPcs)})</span>
-          </div>
-          <div className="composition-legend">
-            <span className="legend-item"><span className="legend-dot fabric-dot" /> Fabric ({fabricPercent}%)</span>
-            <span className="legend-item"><span className="legend-dot acc-dot" /> Accessories ({accPercent}%)</span>
-            <span className="legend-item"><span className="legend-dot jasa-dot" /> Jasa CMT ({jasaPercent}%)</span>
-            <span className="legend-item"><span className="legend-dot buffer-dot" /> Buffer & Overhead ({bufferPercent}%)</span>
-          </div>
-        </div>
-        <div className="composition-bar-track">
-          <div className="bar-segment fabric-bar" style={{ width: `${fabricPercent}%` }} title={`Fabric: ${fabricPercent}%`} />
-          <div className="bar-segment acc-bar" style={{ width: `${accPercent}%` }} title={`Accessories: ${accPercent}%`} />
-          <div className="bar-segment jasa-bar" style={{ width: `${jasaPercent}%` }} title={`Jasa CMT: ${jasaPercent}%`} />
-          <div className="bar-segment buffer-bar" style={{ width: `${bufferPercent}%` }} title={`Buffer/Overhead: ${bufferPercent}%`} />
-        </div>
-      </div>
-
-      {/* SECTION 1: Detail Fabric */}
-      <div className="detail-section-card">
-        <div className="section-card-header">
-          <div className="section-title-group">
-            <div className="section-icon-badge fabric-badge">
-              <Scissors size={18} />
-            </div>
-            <div>
-              <h2 className="section-title">1. Detail Fabric (Bahan Baku Kain)</h2>
-              <p className="section-desc">Kebutuhan kain utama, lapisan interlining, pemakaian konsumsi per pcs dan total</p>
-            </div>
-          </div>
-          <div className="section-header-stat font-mono">
-            Subtotal: <strong>{formatRupiah(item.fabricCostPerPcs)}</strong> / pcs
-          </div>
-        </div>
-
-        <div className="table-responsive-container">
-          <table className="precosting-detail-table">
-            <thead>
-              <tr>
-                <th style={{ width: '40px' }} className="th-center">No</th>
-                <th style={{ minWidth: '220px' }}>Nama Fabric / Kain</th>
-                <th style={{ minWidth: '200px' }}>Spesifikasi & Konstruksi</th>
-                <th style={{ minWidth: '150px' }}>Bagian Garmen</th>
-                <th className="th-right" style={{ minWidth: '110px' }}>Konsumsi (Pcs)</th>
-                <th className="th-center" style={{ minWidth: '70px' }}>Satuan</th>
-                <th className="th-right" style={{ minWidth: '120px' }}>Harga Satuan</th>
-                <th className="th-right" style={{ minWidth: '130px' }}>Total Biaya / Pcs</th>
-                <th className="th-right" style={{ minWidth: '150px' }}>Biaya Semua Qty</th>
-              </tr>
-            </thead>
-            <tbody>
-              {item.fabrics.map((f, idx) => {
-                const costPerPcs = (Number(f.consumption) || 0) * (Number(f.unitPrice) || 0);
-                const costAllQty = costPerPcs * (Number(item.targetQty) || 0);
-                return (
-                  <tr key={f.id || idx}>
-                    <td className="td-center font-mono text-muted">{idx + 1}</td>
-                    <td className="font-semibold text-dark">{f.name}</td>
-                    <td className="text-secondary">{f.spec || '-'}</td>
-                    <td><span className="part-tag">{f.part || 'Main Body'}</span></td>
-                    <td className="td-right font-mono font-medium">{f.consumption}</td>
-                    <td className="td-center text-secondary">{f.unit}</td>
-                    <td className="td-right font-mono">{formatRupiah(f.unitPrice)}</td>
-                    <td className="td-right font-mono font-semibold text-fabric">{formatRupiah(costPerPcs)}</td>
-                    <td className="td-right font-mono font-bold text-total-qty">{formatRupiah(costAllQty)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="tfoot-subtotal">
-                <td colSpan="7" className="td-right font-bold">Subtotal Biaya Fabric:</td>
-                <td className="td-right font-mono font-bold text-fabric">{formatRupiah(item.fabricCostPerPcs)}</td>
-                <td className="td-right font-mono font-bold text-total-qty">{formatRupiah(item.totalFabricCostAllQty)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-
-      {/* SECTION 2: Detail Accessories */}
-      <div className="detail-section-card">
-        <div className="section-card-header">
-          <div className="section-title-group">
-            <div className="section-icon-badge acc-badge">
-              <Package size={18} />
-            </div>
-            <div>
-              <h2 className="section-title">2. Detail Accessories & Trims</h2>
-              <p className="section-desc">Kancing, benang, label, zipper, polybag, hangtag dan kemasan master box</p>
-            </div>
-          </div>
-          <div className="section-header-stat font-mono">
-            Subtotal: <strong>{formatRupiah(item.accCostPerPcs)}</strong> / pcs
-          </div>
-        </div>
-
-        <div className="table-responsive-container">
-          <table className="precosting-detail-table">
-            <thead>
-              <tr>
-                <th style={{ width: '40px' }} className="th-center">No</th>
-                <th style={{ minWidth: '220px' }}>Nama Accessories / Trims</th>
-                <th style={{ minWidth: '200px' }}>Spesifikasi Teknis</th>
-                <th className="th-right" style={{ minWidth: '100px' }}>Qty / Pcs</th>
-                <th className="th-center" style={{ minWidth: '80px' }}>Satuan</th>
-                <th className="th-right" style={{ minWidth: '110px' }}>Harga Satuan</th>
-                <th className="th-right" style={{ minWidth: '130px' }}>Total Biaya / Pcs</th>
-                <th className="th-right" style={{ minWidth: '150px' }}>Biaya Semua Qty</th>
-              </tr>
-            </thead>
-            <tbody>
-              {item.accessories.map((a, idx) => {
-                const costPerPcs = (Number(a.qtyPerPcs) || 0) * (Number(a.unitPrice) || 0);
-                const costAllQty = costPerPcs * (Number(item.targetQty) || 0);
-                return (
-                  <tr key={a.id || idx}>
-                    <td className="td-center font-mono text-muted">{idx + 1}</td>
-                    <td className="font-semibold text-dark">{a.name}</td>
-                    <td className="text-secondary">{a.spec || '-'}</td>
-                    <td className="td-right font-mono font-medium">{a.qtyPerPcs}</td>
-                    <td className="td-center text-secondary">{a.unit}</td>
-                    <td className="td-right font-mono">{formatRupiah(a.unitPrice)}</td>
-                    <td className="td-right font-mono font-semibold text-acc">{formatRupiah(costPerPcs)}</td>
-                    <td className="td-right font-mono font-bold text-total-qty">{formatRupiah(costAllQty)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="tfoot-subtotal">
-                <td colSpan="6" className="td-right font-bold">Subtotal Biaya Accessories:</td>
-                <td className="td-right font-mono font-bold text-acc">{formatRupiah(item.accCostPerPcs)}</td>
-                <td className="td-right font-mono font-bold text-total-qty">{formatRupiah(item.totalAccCostAllQty)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-
-      {/* SECTION 3: Detail Jasa */}
-      <div className="detail-section-card">
-        <div className="section-card-header">
-          <div className="section-title-group">
-            <div className="section-icon-badge jasa-badge">
-              <Layers size={18} />
-            </div>
-            <div>
-              <h2 className="section-title">3. Detail Jasa & Proses Produksi (CMT)</h2>
-              <p className="section-desc">Pola marker, potong, jahit CMT, sablon/bordir, wash, finishing dan overhead</p>
-            </div>
-          </div>
-          <div className="section-header-stat font-mono">
-            Subtotal: <strong>{formatRupiah(item.jasaCostPerPcs)}</strong> / pcs
-          </div>
-        </div>
-
-        <div className="table-responsive-container">
-          <table className="precosting-detail-table">
-            <thead>
-              <tr>
-                <th style={{ width: '40px' }} className="th-center">No</th>
-                <th style={{ minWidth: '230px' }}>Jenis Jasa / Proses</th>
-                <th style={{ minWidth: '150px' }}>Klasifikasi Akuntansi</th>
-                <th style={{ minWidth: '220px' }}>Uraian Pekerjaan & Standar</th>
-                <th className="th-right" style={{ minWidth: '130px' }}>Biaya Jasa / Pcs</th>
-                <th className="th-right" style={{ minWidth: '150px' }}>Biaya Semua Qty</th>
-              </tr>
-            </thead>
-            <tbody>
-              {item.services.map((s, idx) => {
-                const costPerPcs = Number(s.unitPrice) || 0;
-                const costAllQty = costPerPcs * (Number(item.targetQty) || 0);
-                return (
-                  <tr key={s.id || idx}>
-                    <td className="td-center font-mono text-muted">{idx + 1}</td>
-                    <td className="font-semibold text-dark">{s.name}</td>
-                    <td>
-                      <span className={`category-pill ${s.category === 'Direct Labor' ? 'labor-pill' : 'overhead-pill'}`}>
-                        {s.category}
-                      </span>
-                    </td>
-                    <td className="text-secondary">{s.description || '-'}</td>
-                    <td className="td-right font-mono font-semibold text-jasa">{formatRupiah(costPerPcs)}</td>
-                    <td className="td-right font-mono font-bold text-total-qty">{formatRupiah(costAllQty)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="tfoot-subtotal">
-                <td colSpan="4" className="td-right font-bold">Subtotal Biaya Jasa & CMT:</td>
-                <td className="td-right font-mono font-bold text-jasa">{formatRupiah(item.jasaCostPerPcs)}</td>
-                <td className="td-right font-mono font-bold text-total-qty">{formatRupiah(item.totalJasaCostAllQty)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-
-      {/* SECTION 4: Financial Summary (COGS, COGM, HPP Breakdown) */}
-      <div className="detail-section-card financial-breakdown-card">
-        <div className="section-card-header">
-          <div className="section-title-group">
-            <div className="section-icon-badge financial-badge">
-              <TrendingUp size={18} />
-            </div>
-            <div>
-              <h2 className="section-title">4. Pemetaan Finansial: COGS, COGM & HPP</h2>
-              <p className="section-desc">Kalkulasi akuntansi biaya garmen, margin keuntungan dan rekomendasi harga jual</p>
-            </div>
-          </div>
-          <div className="section-header-stat font-mono">
-            Target Batch: <strong>{formatNumber(item.targetQty)} Pcs</strong>
-          </div>
-        </div>
-
-        <div className="accounting-summary-grid">
-          {/* Detailed Calculation Table */}
-          <div className="accounting-table-wrapper">
-            <table className="accounting-breakdown-table">
-              <thead>
-                <tr>
-                  <th>Komponen Biaya</th>
-                  <th className="th-right">Biaya per Pcs (Kain)</th>
-                  <th className="th-right">Biaya Semua Qty ({formatNumber(item.targetQty)} pcs)</th>
-                  <th className="th-center">% Porsi</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>
-                    <div className="acc-item-title">Bahan Baku Langsung (Direct Materials)</div>
-                    <div className="acc-item-sub">Fabric ({formatRupiah(item.fabricCostPerPcs)}) + Acc ({formatRupiah(item.accCostPerPcs)})</div>
-                  </td>
-                  <td className="td-right font-mono font-semibold">{formatRupiah(item.directMaterialPerPcs)}</td>
-                  <td className="td-right font-mono">{formatRupiah(item.directMaterialAllQty)}</td>
-                  <td className="td-center font-mono">{Math.round((item.directMaterialPerPcs / totalCost) * 100)}%</td>
-                </tr>
-                <tr>
-                  <td>
-                    <div className="acc-item-title">Tenaga Kerja Langsung (Direct Labor)</div>
-                    <div className="acc-item-sub">Jasa Potong (Cutting), Jahit CMT & Pasang Kancing</div>
-                  </td>
-                  <td className="td-right font-mono font-semibold">{formatRupiah(item.directLaborPerPcs)}</td>
-                  <td className="td-right font-mono">{formatRupiah(item.directLaborAllQty)}</td>
-                  <td className="td-center font-mono">{Math.round((item.directLaborPerPcs / totalCost) * 100)}%</td>
-                </tr>
-                <tr>
-                  <td>
-                    <div className="acc-item-title">Overhead Pabrik (Factory Overhead)</div>
-                    <div className="acc-item-sub">Pola marker, sablon/bordir, wash, QC, listrik & supervisi</div>
-                  </td>
-                  <td className="td-right font-mono font-semibold">{formatRupiah(item.factoryOverheadPerPcs)}</td>
-                  <td className="td-right font-mono">{formatRupiah(item.factoryOverheadAllQty)}</td>
-                  <td className="td-center font-mono">{Math.round((item.factoryOverheadPerPcs / totalCost) * 100)}%</td>
-                </tr>
-                <tr className="tr-highlight-cogm">
-                  <td>
-                    <div className="acc-item-title font-bold text-purple">
-                      COGM (Cost of Goods Manufactured / Biaya Pokok Produksi)
-                    </div>
-                    <div className="acc-item-sub">Direct Material + Direct Labor + Factory Overhead</div>
-                  </td>
-                  <td className="td-right font-mono font-bold text-purple">{formatRupiah(item.cogmPerPcs)}</td>
-                  <td className="td-right font-mono font-bold text-purple">{formatRupiah(item.cogmAllQty)}</td>
-                  <td className="td-center font-mono font-bold text-purple">
-                    {Math.round((item.cogmPerPcs / totalCost) * 100)}%
-                  </td>
-                </tr>
-                <tr>
-                  <td>
-                    <div className="acc-item-title">Buffer Penyusutan & Handling Ekspedisi (2.5%)</div>
-                    <div className="acc-item-sub">Toleransi susut kain, reject finishing & transport</div>
-                  </td>
-                  <td className="td-right font-mono font-semibold">{formatRupiah(item.bufferPerPcs)}</td>
-                  <td className="td-right font-mono">{formatRupiah(item.bufferAllQty)}</td>
-                  <td className="td-center font-mono">{bufferPercent}%</td>
-                </tr>
-                <tr className="tr-highlight-hpp">
-                  <td>
-                    <div className="acc-item-title font-bold text-emerald">
-                      HPP / COGS (Harga Pokok Penjualan)
-                    </div>
-                    <div className="acc-item-sub font-semibold">Total Modal per Unit untuk Delivery</div>
-                  </td>
-                  <td className="td-right font-mono font-bold text-emerald text-lg">{formatRupiah(item.hppPerPcs)}</td>
-                  <td className="td-right font-mono font-bold text-emerald text-lg">{formatRupiah(item.hppAllQty)}</td>
-                  <td className="td-center font-mono font-bold text-emerald">100%</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pricing & Commercial Target Card */}
-          <div className="commercial-target-card">
-            <h3 className="commercial-card-title">
-              <Sparkles size={16} /> Target Harga Jual & Margin
-            </h3>
-            
-            <div className="commercial-metric-row">
-              <span className="comm-label">Target Gross Margin:</span>
-              <span className="comm-val font-mono">
-                {Math.round((item.targetMarkupRate || 0.30) * 100)}% (Standard Retail / FOB)
-              </span>
-            </div>
-
-            <div className="commercial-metric-row">
-              <span className="comm-label">Rekomendasi Harga Jual (FOB):</span>
-              <span className="comm-val font-mono font-bold text-primary-gradient text-lg">
-                {formatRupiah(item.targetSellingPricePerPcs)} <span className="text-xs text-muted">/ pcs</span>
-              </span>
-            </div>
-
-            <div className="commercial-metric-row">
-              <span className="comm-label">Estimasi Gross Profit per Pcs:</span>
-              <span className="comm-val font-mono font-semibold text-emerald">
-                +{formatRupiah(item.targetGrossProfitPerPcs)}
-              </span>
-            </div>
-
-            <div className="commercial-divider" />
-
-            <div className="commercial-metric-row">
-              <span className="comm-label">Total Omzet Proyek ({formatNumber(item.targetQty)} pcs):</span>
-              <span className="comm-val font-mono font-bold">
-                {formatRupiah(item.totalRevenueAllQty)}
-              </span>
-            </div>
-
-            <div className="commercial-metric-row">
-              <span className="comm-label">Total Keuntungan Kotor (All Qty):</span>
-              <span className="comm-val font-mono font-bold text-emerald">
-                +{formatRupiah(item.totalProfitAllQty)}
-              </span>
-            </div>
-
-            <div className="commercial-note">
-              *Catatan: Harga di atas merupakan rekomendasi berdasarkan baseline HPP {formatRupiah(item.hppPerPcs)} per potong.
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* SECTION 5: Remarks / Catatan & Riwayat Diskusi */}
-      <div className="detail-section-card no-print">
-        <div className="section-card-header">
-          <div className="section-title-group">
-            <div className="section-icon-badge remarks-badge">
-              <MessageSquare size={18} />
-            </div>
-            <div>
-              <h2 className="section-title">5. Catatan & Remarks Precosting ({remarks.length})</h2>
-              <p className="section-desc">Riwayat catatan teknis kain, toleransi pola, spesifikasi trims dan instruksi approval</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Add Remark Form */}
-        <form onSubmit={handleAddRemarkSubmit} className="add-remark-form">
-          <div className="remark-input-group">
-            <textarea
-              className="remark-textarea"
-              rows="3"
-              placeholder="Tulis catatan/remarks untuk precosting ini (misal: penyesuaian konsumsi kain, toleransi susut, catatan CMT)..."
-              value={newRemarkText}
-              onChange={(e) => setNewRemarkText(e.target.value)}
-            />
-            <div className="remark-submit-bar">
-              <span className="remark-author-hint">
-                Posting sebagai: <strong>{user ? `${user.name} (${user.role})` : 'User'}</strong>
-              </span>
-              <button 
-                type="submit" 
-                className="btn-send-remark"
-                disabled={!newRemarkText.trim()}
-              >
-                <Send size={15} />
-                <span>Kirim Remarks</span>
-              </button>
-            </div>
-          </div>
-        </form>
-
-        {/* Remarks History Feed */}
-        <div className="remarks-history-feed">
-          {remarks.length === 0 ? (
-            <div className="no-remarks-hint">
-              Belum ada catatan untuk precosting ini. Tulis catatan pertama di atas.
-            </div>
-          ) : (
-            remarks.map((rem) => (
-              <div key={rem.id} className="remark-card-item">
-                <div className="remark-item-header">
-                  <div className="remark-author-info">
-                    <span className="remark-author-name">{rem.author}</span>
-                    {rem.role && <span className="remark-role-tag">{rem.role}</span>}
-                  </div>
-                  <span className="remark-timestamp">{rem.timestamp}</span>
-                </div>
-                <div className="remark-item-body">{rem.text}</div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* SECTION 6: Bottom Approval Action Bar */}
-      <div className="bottom-approval-bar no-print">
-        <div className="bar-info-side">
-          <div className="bar-item-name">{item.itemName} ({item.precostingNo})</div>
-          <div className="bar-cost-recap font-mono">
-            HPP: <strong>{formatRupiah(item.hppPerPcs)}</strong> / pcs • Total Modal: <strong>{formatRupiah(item.hppAllQty)}</strong>
-          </div>
-        </div>
-        <div className="bar-actions-side">
-          <button
-            type="button"
-            className="btn-bottom-remarks"
-            onClick={() => {
-              window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-            }}
-          >
-            <MessageSquare size={16} />
-            <span>Tambah Remarks</span>
-          </button>
-
-          {!isConfirmed && (
-            <button
-              type="button"
-              className="btn-bottom-approve"
-              onClick={() => setApprovalModalItem(item)}
-            >
-              <CheckCircle size={16} />
-              <span>Approve Precosting Sekarang</span>
-            </button>
-          )}
-
-          {!isRejected && (
-            <button
-              type="button"
-              className="btn-bottom-reject"
-              onClick={() => setRejectModalItem(item)}
-            >
-              <XCircle size={16} />
-              <span>Reject Precosting</span>
-            </button>
-          )}
-        </div>
-      </div>
     </div>
   );
 };

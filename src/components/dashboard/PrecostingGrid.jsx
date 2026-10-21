@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { usePrecosting } from '../../context/PrecostingContext';
 import { formatRupiah, formatNumber } from '../../utils/formatters';
 import { decodeBase64Image } from '../../utils/imageUtils';
@@ -23,6 +23,14 @@ import {
   RotateCw
 } from 'lucide-react';
 
+// Helper to detect mobile/smartphone viewport & device
+const isMobileDevice = () => {
+  if (typeof window === 'undefined') return false;
+  const isMobileWidth = window.innerWidth <= 768;
+  const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  return isMobileWidth || isMobileUA;
+};
+
 export const PrecostingGrid = () => {
   const {
     precostings,
@@ -45,7 +53,30 @@ export const PrecostingGrid = () => {
   } = usePrecosting();
 
   // Mobile layout mode toggle: 'card' (optimal for HP) or 'table' (compact scrollable)
-  const [viewMode, setViewMode] = useState('table'); // 'table' | 'card'
+  // Automatically defaults to 'card' on mobile/HP and 'table' on desktop/PC
+  const [hasManuallyToggled, setHasManuallyToggled] = useState(false);
+  const [viewMode, setViewMode] = useState(() => {
+    return isMobileDevice() ? 'card' : 'table';
+  });
+
+  // Auto-detect mobile vs desktop layout on window resize (unless manually toggled by user)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleResize = () => {
+      if (!hasManuallyToggled) {
+        setViewMode(isMobileDevice() ? 'card' : 'table');
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [hasManuallyToggled]);
+
+  const handleToggleView = (mode) => {
+    setHasManuallyToggled(true);
+    setViewMode(mode);
+  };
 
   // Filter & Search
   const filteredItems = precostings.filter((item) => {
@@ -209,7 +240,7 @@ export const PrecostingGrid = () => {
               <button
                 type="button"
                 className={`view-toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
-                onClick={() => setViewMode('table')}
+                onClick={() => handleToggleView('table')}
                 title="Tampilan Tabel"
               >
                 <List size={16} />
@@ -217,7 +248,7 @@ export const PrecostingGrid = () => {
               <button
                 type="button"
                 className={`view-toggle-btn ${viewMode === 'card' ? 'active' : ''}`}
-                onClick={() => setViewMode('card')}
+                onClick={() => handleToggleView('card')}
                 title="Tampilan Kartu (Optimal HP)"
               >
                 <LayoutGrid size={16} />
@@ -256,550 +287,558 @@ export const PrecostingGrid = () => {
       </div>
 
       {/* Main Table View (Desktop & Responsive Scroll) */}
-      <div className={`table-view-wrapper ${viewMode === 'card' ? 'hidden-on-mobile' : ''}`}>
-        <div className="table-responsive-container">
-          <table className="precosting-table">
-            <thead>
-              <tr>
-                <th style={{ minWidth: '130px' }}>Nomor Precosting</th>
-                <th className="th-center" style={{ width: '65px' }}>Image</th>
-                <th className="th-center" style={{ minWidth: '105px' }}>
-                  Qty Produksi<br />
-                  <span className="th-sub">(Pcs)</span>
-                </th>
-                <th style={{ minWidth: '220px' }}>Nama Style</th>
-                <th className="th-center" style={{ minWidth: '95px' }}>
-                  Consm<br />
-                  <span className="th-sub">(per pcs)</span>
-                </th>
-                <th className="th-right" style={{ minWidth: '120px' }}>
-                  Harga Fabric<br />
-                  <span className="th-sub">(per unit)</span>
-                </th>
-                <th className="th-right" style={{ minWidth: '140px' }}>
-                  Total Kain<br />
-                  <span className="th-sub">(Harga Fabric × Consm)</span>
-                </th>
-                <th className="th-right" style={{ minWidth: '130px' }}>
-                  Harga CMT<br />
-                  <span className="th-sub">(Total Jasa)</span>
-                </th>
-                <th className="th-right" style={{ minWidth: '125px' }}>
-                  Harga Accesories<br />
-                  <span className="th-sub">(Acc per pcs)</span>
-                </th>
-                <th className="th-right" style={{ minWidth: '120px' }}>
-                  HPP<br />
-                  <span className="th-sub">(per pcs)</span>
-                </th>
-                <th className="th-right" style={{ minWidth: '110px' }}>
-                  PPN<br />
-                  <span className="th-sub">(11%)</span>
-                </th>
-                <th className="th-center" style={{ minWidth: '235px' }}>
-                  Action<br />
-                  <span className="th-sub">(Detail & Approval)</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
+      {viewMode === 'table' && (
+        <div className="table-view-wrapper">
+          <div className="table-responsive-container">
+            <table className="precosting-table">
+              <thead>
                 <tr>
-                  <td colSpan="12" className="empty-state-cell">
-                    <div className="empty-state">
-                      <RotateCw size={32} className="empty-icon spin-animation" />
-                      <h4>Memuat data dari PostgreSQL...</h4>
-                      <p>Mengambil data precosting langsung melalui API backend.</p>
-                    </div>
-                  </td>
+                  <th style={{ minWidth: '130px' }}>Nomor Precosting</th>
+                  <th className="th-center" style={{ width: '65px' }}>Image</th>
+                  <th className="th-center" style={{ minWidth: '105px' }}>
+                    Qty Produksi<br />
+                    <span className="th-sub">(Pcs)</span>
+                  </th>
+                  <th style={{ minWidth: '220px' }}>Nama Style</th>
+                  <th className="th-center" style={{ minWidth: '95px' }}>
+                    Consm<br />
+                    <span className="th-sub">(per pcs)</span>
+                  </th>
+                  <th className="th-right" style={{ minWidth: '120px' }}>
+                    Harga Fabric<br />
+                    <span className="th-sub">(per unit)</span>
+                  </th>
+                  <th className="th-right" style={{ minWidth: '140px' }}>
+                    Total Kain<br />
+                    <span className="th-sub">(Harga Fabric × Consm)</span>
+                  </th>
+                  <th className="th-right" style={{ minWidth: '130px' }}>
+                    Harga CMT<br />
+                    <span className="th-sub">(Total Jasa)</span>
+                  </th>
+                  <th className="th-right" style={{ minWidth: '125px' }}>
+                    Harga Accesories<br />
+                    <span className="th-sub">(Acc per pcs)</span>
+                  </th>
+                  <th className="th-right" style={{ minWidth: '120px' }}>
+                    HPP<br />
+                    <span className="th-sub">(per pcs)</span>
+                  </th>
+                  <th className="th-right" style={{ minWidth: '110px' }}>
+                    PPN<br />
+                    <span className="th-sub">(11%)</span>
+                  </th>
+                  <th className="th-center" style={{ minWidth: '235px' }}>
+                    Action<br />
+                    <span className="th-sub">(Detail & Approval)</span>
+                  </th>
                 </tr>
-              ) : apiError && precostings.length === 0 ? (
-                <tr>
-                  <td colSpan="12" className="empty-state-cell">
-                    <div className="empty-state">
-                      <AlertTriangle size={36} className="empty-icon text-amber" />
-                      <h4>Koneksi API Server Terputus</h4>
-                      <p>{apiError}</p>
-                      <button
-                        type="button"
-                        className="btn-sync-refresh"
-                        style={{ marginTop: '12px', display: 'inline-flex' }}
-                        onClick={refreshFromBackend}
-                      >
-                        <RotateCw size={14} className="sync-icon" />
-                        <span>Coba Hubungkan Lagi</span>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ) : sortedItems.length === 0 ? (
-                <tr>
-                  <td colSpan="12" className="empty-state-cell">
-                    <div className="empty-state">
-                      <Layers size={36} className="empty-icon" />
-                      <h4>Tidak ada data precosting di database</h4>
-                      <p>Data tabel "PrecostingHeader" kosong atau filter pencarian tidak sesuai.</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                sortedItems.map((item) => {
-                  const remarksCount = item.remarks ? item.remarks.length : 0;
-                  const targetQty = Number(item.targetQty || item.ProdQty || 1000);
-                  const consmVal = Number(item.consm ?? item.Consume ?? item.mainFabricConsumption ?? item.fabrics?.[0]?.consumption ?? 0);
-                  const consmUnit = item.mainFabricUnit === 'Meter' ? 'm' : (item.mainFabricUnit || 'm');
-
-                  const fabricPrice = Number(
-                    item.fabricPrice ??
-                    item.FabricPrice ??
-                    item.hargaFabric ??
-                    item.mainFabricUnitPrice ??
-                    item.fabrics?.[0]?.unitPrice ??
-                    0
-                  );
-
-                  let totalFabricPerPcs = Number(
-                    item.fabricCostPerPcs ??
-                    item.totalKainPerPcs ??
-                    item.totalKain ??
-                    item.totalFabric ??
-                    item.TotalFabricPrice ??
-                    0
-                  );
-                  if (totalFabricPerPcs > 100000 && targetQty > 1 && (fabricPrice === 0 || totalFabricPerPcs > fabricPrice * 2)) {
-                    totalFabricPerPcs = Math.round(totalFabricPerPcs / targetQty);
-                  }
-                  if (totalFabricPerPcs === 0 && consmVal > 0 && fabricPrice > 0) {
-                    totalFabricPerPcs = Math.round(consmVal * fabricPrice);
-                  }
-
-                  let cmtPriceVal = Number(
-                    item.jasaCostPerPcs ??
-                    item.cmtCostPerPcs ??
-                    item.cmtPrice ??
-                    item.hargaCmt ??
-                    item.CMTPrice ??
-                    0
-                  );
-                  if (cmtPriceVal > 500000 && targetQty > 1) {
-                    cmtPriceVal = Math.round(cmtPriceVal / targetQty);
-                  }
-
-                  let accPriceVal = Number(
-                    item.accCostPerPcs ??
-                    item.accessoriesCostPerPcs ??
-                    item.accPrice ??
-                    item.hargaAccessories ??
-                    item.AccPrice ??
-                    0
-                  );
-                  if (accPriceVal > 50000 && targetQty > 1 && (item.hpp ? accPriceVal > Number(item.hpp) : true)) {
-                    accPriceVal = Math.round(accPriceVal / targetQty);
-                  }
-
-                  let hppVal = Number(item.hppPerPcs ?? item.hpp ?? item.HPP ?? 0);
-                  if (hppVal === 0) {
-                    const base = totalFabricPerPcs + cmtPriceVal + accPriceVal;
-                    hppVal = base > 0 ? Math.round(base * 1.025) : 0;
-                  }
-
-                  const ppnVal = Number(item.ppnPerPcs ?? item.taxPrice ?? item.TaxPrice ?? item.ppn ?? Math.round(hppVal * 0.11));
-
-                  return (
-                    <tr key={item.id} className="table-row-hover">
-                      {/* 1. Nomor Precosting */}
-                      <td className="td-precosting-no font-mono font-bold">
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  <tr>
+                    <td colSpan="12" className="empty-state-cell">
+                      <div className="empty-state">
+                        <RotateCw size={32} className="empty-icon spin-animation" />
+                        <h4>Memuat data dari PostgreSQL...</h4>
+                        <p>Mengambil data precosting langsung melalui API backend.</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : apiError && precostings.length === 0 ? (
+                  <tr>
+                    <td colSpan="12" className="empty-state-cell">
+                      <div className="empty-state">
+                        <AlertTriangle size={36} className="empty-icon text-amber" />
+                        <h4>Koneksi API Server Terputus</h4>
+                        <p>{apiError}</p>
                         <button
                           type="button"
-                          className="link-precosting-no"
-                          onClick={() => selectPrecosting(item.id)}
-                          title="Lihat Detail Precosting"
+                          className="btn-sync-refresh"
+                          style={{ marginTop: '12px', display: 'inline-flex' }}
+                          onClick={refreshFromBackend}
                         >
-                          {item.precostingNo}
+                          <RotateCw size={14} className="sync-icon" />
+                          <span>Coba Hubungkan Lagi</span>
                         </button>
-                      </td>
+                      </div>
+                    </td>
+                  </tr>
+                ) : sortedItems.length === 0 ? (
+                  <tr>
+                    <td colSpan="12" className="empty-state-cell">
+                      <div className="empty-state">
+                        <Layers size={36} className="empty-icon" />
+                        <h4>Tidak ada data precosting di database</h4>
+                        <p>Data tabel "PrecostingHeader" kosong atau filter pencarian tidak sesuai.</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  sortedItems.map((item) => {
+                    const remarksCount = item.remarks ? item.remarks.length : 0;
+                    const targetQty = Number(item.targetQty || item.ProdQty || 1000);
+                    const consmVal = Number(item.consm ?? item.Consume ?? item.mainFabricConsumption ?? item.fabrics?.[0]?.consumption ?? 0);
+                    const consmUnit = item.mainFabricUnit === 'Meter' ? 'm' : (item.mainFabricUnit || 'm');
 
-                      {/* 2. Image */}
-                      <td className="td-center td-image-cell">
-                        <img
-                          src={decodeBase64Image(item.image)}
-                          alt={item.itemName}
-                          className="grid-thumb-img"
-                          onClick={() => selectPrecosting(item.id)}
-                          title="Klik untuk lihat detail style"
-                          onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.src = '/images/shirt.jpg';
-                          }}
-                        />
-                      </td>
+                    const fabricPrice = Number(
+                      item.fabricPrice ??
+                      item.FabricPrice ??
+                      item.hargaFabric ??
+                      item.mainFabricUnitPrice ??
+                      item.fabrics?.[0]?.unitPrice ??
+                      0
+                    );
 
-                      {/* 3. Qty Produksi */}
-                      <td className="td-center font-mono">
-                        <span className="qty-pill">
-                          {formatNumber(item.targetQty)} Pcs
-                        </span>
-                      </td>
+                    let totalFabricPerPcs = Number(
+                      item.fabricCostPerPcs ??
+                      item.totalKainPerPcs ??
+                      item.totalKain ??
+                      item.totalFabric ??
+                      item.TotalFabricPrice ??
+                      0
+                    );
+                    if (totalFabricPerPcs > 100000 && targetQty > 1 && (fabricPrice === 0 || totalFabricPerPcs > fabricPrice * 2)) {
+                      totalFabricPerPcs = Math.round(totalFabricPerPcs / targetQty);
+                    }
+                    if (totalFabricPerPcs === 0 && consmVal > 0 && fabricPrice > 0) {
+                      totalFabricPerPcs = Math.round(consmVal * fabricPrice);
+                    }
 
-                      {/* 4. Nama Style */}
-                      <td className="td-item-name">
-                        <div className="style-name-block">
+                    let cmtPriceVal = Number(
+                      item.jasaCostPerPcs ??
+                      item.cmtCostPerPcs ??
+                      item.cmtPrice ??
+                      item.hargaCmt ??
+                      item.CMTPrice ??
+                      0
+                    );
+                    if (cmtPriceVal > 500000 && targetQty > 1) {
+                      cmtPriceVal = Math.round(cmtPriceVal / targetQty);
+                    }
+
+                    let accPriceVal = Number(
+                      item.accCostPerPcs ??
+                      item.accessoriesCostPerPcs ??
+                      item.accPrice ??
+                      item.hargaAccessories ??
+                      item.AccPrice ??
+                      0
+                    );
+                    if (accPriceVal > 50000 && targetQty > 1 && (item.hpp ? accPriceVal > Number(item.hpp) : true)) {
+                      accPriceVal = Math.round(accPriceVal / targetQty);
+                    }
+
+                    let hppVal = Number(item.hppPerPcs ?? item.hpp ?? item.HPP ?? 0);
+                    if (hppVal === 0) {
+                      const base = totalFabricPerPcs + cmtPriceVal + accPriceVal;
+                      hppVal = base > 0 ? Math.round(base * 1.025) : 0;
+                    }
+
+                    const ppnVal = Number(item.ppnPerPcs ?? item.taxPrice ?? item.TaxPrice ?? item.ppn ?? Math.round(hppVal * 0.11));
+
+                    return (
+                      <tr key={item.id} className="table-row-hover">
+                        {/* 1. Nomor Precosting */}
+                        <td className="td-precosting-no font-mono font-bold">
                           <button
                             type="button"
-                            className="item-title font-semibold text-left-btn"
+                            className="link-precosting-no"
                             onClick={() => selectPrecosting(item.id)}
+                            title="Lihat Detail Precosting"
                           >
-                            {item.itemName}
+                            {item.precostingNo}
                           </button>
-                          <div className="item-meta-sub">
-                            <span className="item-category-tag">{item.category}</span>
-                            {item.buyer && <span className="item-buyer-name">• {item.buyer}</span>}
-                            <span className="style-status-inline">{getStatusBadge(item.status || item.Status)}</span>
-                            {getSyncBadge(item.sync_status)}
-                          </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* 5. Consm */}
-                      <td className="td-center font-mono">
-                        <div className="consm-display">
-                          <span className="consm-val font-bold">{consmVal}</span>
-                          <span className="consm-unit text-muted"> {consmUnit}</span>
-                          {item.fabrics && item.fabrics.length > 1 && (
-                            <div className="consm-extra-badge">
-                              +{item.fabrics.length - 1} kain
+                        {/* 2. Image */}
+                        <td className="td-center td-image-cell">
+                          <img
+                            src={decodeBase64Image(item.image)}
+                            alt={item.itemName}
+                            className="grid-thumb-img"
+                            onClick={() => selectPrecosting(item.id)}
+                            title="Klik untuk lihat detail style"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = '/images/shirt.jpg';
+                            }}
+                          />
+                        </td>
+
+                        {/* 3. Qty Produksi */}
+                        <td className="td-center font-mono">
+                          <span className="qty-pill">
+                            {formatNumber(item.targetQty)} Pcs
+                          </span>
+                        </td>
+
+                        {/* 4. Nama Style */}
+                        <td className="td-item-name">
+                          <div className="style-name-block">
+                            <button
+                              type="button"
+                              className="item-title font-semibold text-left-btn"
+                              onClick={() => selectPrecosting(item.id)}
+                            >
+                              {item.itemName}
+                            </button>
+                            <div className="item-meta-sub">
+                              <span className="item-category-tag">{item.category}</span>
+                              {item.buyer && <span className="item-buyer-name">• {item.buyer}</span>}
+                              <span className="style-status-inline">{getStatusBadge(item.status || item.Status)}</span>
+                              {getSyncBadge(item.sync_status)}
                             </div>
-                          )}
-                        </div>
-                      </td>
+                          </div>
+                        </td>
 
-                      {/* 6. Harga Fabric */}
-                      <td className="td-right font-mono font-medium">
-                        {formatRupiah(fabricPrice)}
-                      </td>
+                        {/* 5. Consm */}
+                        <td className="td-center font-mono">
+                          <div className="consm-display">
+                            <span className="consm-val font-bold">{consmVal}</span>
+                            <span className="consm-unit text-muted"> {consmUnit}</span>
+                            {item.fabrics && item.fabrics.length > 1 && (
+                              <div className="consm-extra-badge">
+                                +{item.fabrics.length - 1} kain
+                              </div>
+                            )}
+                          </div>
+                        </td>
 
-                      {/* 7. Total Kain (harga fabric * consm) */}
-                      <td className="td-right font-mono font-semibold text-fabric">
-                        {formatRupiah(totalFabricPerPcs)}
-                      </td>
+                        {/* 6. Harga Fabric */}
+                        <td className="td-right font-mono font-medium">
+                          {formatRupiah(fabricPrice)}
+                        </td>
 
-                      {/* 8. Harga CMT (total jasa) */}
-                      <td className="td-right font-mono font-semibold text-jasa">
-                        {formatRupiah(cmtPriceVal)}
-                      </td>
+                        {/* 7. Total Kain (harga fabric * consm) */}
+                        <td className="td-right font-mono font-semibold text-fabric">
+                          {formatRupiah(totalFabricPerPcs)}
+                        </td>
 
-                      {/* 9. Harga Accesories */}
-                      <td className="td-right font-mono font-semibold text-acc">
-                        {formatRupiah(accPriceVal)}
-                      </td>
+                        {/* 8. Harga CMT (total jasa) */}
+                        <td className="td-right font-mono font-semibold text-jasa">
+                          {formatRupiah(cmtPriceVal)}
+                        </td>
 
-                      {/* 10. HPP */}
-                      <td className="td-right font-mono font-bold text-hpp">
-                        {formatRupiah(hppVal)}
-                      </td>
+                        {/* 9. Harga Accesories */}
+                        <td className="td-right font-mono font-semibold text-acc">
+                          {formatRupiah(accPriceVal)}
+                        </td>
 
-                      {/* 11. PPN */}
-                      <td className="td-right font-mono font-semibold text-ppn">
-                        {formatRupiah(ppnVal)}
-                      </td>
+                        {/* 10. HPP */}
+                        <td className="td-right font-mono font-bold text-hpp">
+                          {formatRupiah(hppVal)}
+                        </td>
 
-                      {/* 12. Action (Detail & Approve / Not Approve) */}
-                      <td className="td-center td-actions-cell">
-                        {(() => {
-                          const itemStatus = (item.status || item.Status || '').toLowerCase().trim();
-                          const isConfirmed = itemStatus === 'confirmed' || itemStatus === 'approved' || itemStatus === 'confirm';
-                          const isRejected = itemStatus === 'rejected' || itemStatus === 'reject' || itemStatus === 'revision';
-                          const isPending = !isConfirmed && !isRejected;
+                        {/* 11. PPN */}
+                        <td className="td-right font-mono font-semibold text-ppn">
+                          {formatRupiah(ppnVal)}
+                        </td>
 
-                          return (
-                            <div className="grid-action-buttons">
-                              {/* Detail Button selalu tampil */}
-                              <button
-                                type="button"
-                                className="btn-action btn-view-detail"
-                                onClick={() => selectPrecosting(item.id)}
-                                title="Buka View Detail Lengkap"
-                              >
-                                <Eye size={13} />
-                                <span>Detail</span>
-                              </button>
+                        {/* 12. Action (Detail & Approve / Not Approve) */}
+                        <td className="td-center td-actions-cell">
+                          {(() => {
+                            const itemStatus = (item.status || item.Status || '').toLowerCase().trim();
+                            const isConfirmed = itemStatus === 'confirmed' || itemStatus === 'approved' || itemStatus === 'confirm';
+                            const isRejected = itemStatus === 'rejected' || itemStatus === 'reject' || itemStatus === 'revision';
+                            const isPending = !isConfirmed && !isRejected;
 
-                              {/* Jika Pending: tombol Approve dan Reject tampil */}
-                              {isPending && (
-                                <>
-                                  <button
-                                    type="button"
-                                    className="btn-action btn-approve"
-                                    onClick={() => handleApprove(item)}
-                                    title="Setujui & Konfirmasi Precosting Ini"
-                                  >
-                                    <CheckCircle2 size={13} />
-                                    <span>Approve</span>
-                                  </button>
+                            return (
+                              <div className="grid-action-buttons">
+                                {/* Detail Button selalu tampil */}
+                                <button
+                                  type="button"
+                                  className="btn-action btn-view-detail"
+                                  onClick={() => selectPrecosting(item.id)}
+                                  title="Buka View Detail Lengkap"
+                                >
+                                  <Eye size={13} />
+                                  <span>Detail</span>
+                                </button>
 
-                                  <button
-                                    type="button"
-                                    className="btn-action btn-not-approve"
-                                    onClick={() => setRejectModalItem(item)}
-                                    title="Tolak (Reject) Precosting & Beri Catatan"
-                                  >
-                                    <XCircle size={13} />
-                                    <span>Reject</span>
-                                  </button>
-                                </>
-                              )}
+                                {/* Jika Pending: tombol Approve dan Reject tampil */}
+                                {isPending && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="btn-action btn-approve"
+                                      onClick={() => handleApprove(item)}
+                                      title="Setujui & Konfirmasi Precosting Ini"
+                                    >
+                                      <CheckCircle2 size={13} />
+                                      <span>Approve</span>
+                                    </button>
 
-                              {/* Jika sudah Confirmed: tidak bisa approve atau reject lagi */}
-                              {/* {isConfirmed && (
+                                    <button
+                                      type="button"
+                                      className="btn-action btn-not-approve"
+                                      onClick={() => setRejectModalItem(item)}
+                                      title="Tolak (Reject) Precosting & Beri Catatan"
+                                    >
+                                      <XCircle size={13} />
+                                      <span>Reject</span>
+                                    </button>
+                                  </>
+                                )}
+
+                                {/* Jika sudah Confirmed: tidak bisa approve atau reject lagi */}
+                                {/* {isConfirmed && (
                                 <span className="badge badge-success" style={{ fontSize: '11px', padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }} title="Precosting sudah dikonfirmasi (Confirmed)">
                                   <CheckCircle2 size={12} /> Confirmed
                                 </span>
                               )} */}
 
-                              {/* Jika sudah Rejected: tidak bisa approve atau reject lagi */}
-                              {/* {isRejected && (
+                                {/* Jika sudah Rejected: tidak bisa approve atau reject lagi */}
+                                {/* {isRejected && (
                                 <span className="badge badge-danger" style={{ fontSize: '11px', padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }} title="Precosting sudah ditolak (Rejected)">
                                   <XCircle size={12} /> Rejected
                                 </span>
                               )} */}
-                            </div>
-                          );
-                        })()}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                              </div>
+                            );
+                          })()}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Mobile Card View (Optimized for Smartphones / HP) */}
-      <div className={`card-view-wrapper ${viewMode === 'table' ? 'hidden-on-desktop' : ''}`}>
-        {isLoading ? (
-          <div className="empty-state mobile-empty">
-            <RotateCw size={32} className="empty-icon spin-animation" />
-            <h4>Memuat data dari PostgreSQL...</h4>
-            <p>Mengambil data precosting dari API.</p>
-          </div>
-        ) : apiError && precostings.length === 0 ? (
-          <div className="empty-state mobile-empty">
-            <AlertTriangle size={36} className="empty-icon text-amber" />
-            <h4>Koneksi API Gagal</h4>
-            <p>{apiError}</p>
-            <button
-              type="button"
-              className="btn-sync-refresh"
-              style={{ marginTop: '12px', display: 'inline-flex' }}
-              onClick={refreshFromBackend}
-            >
-              <RotateCw size={14} className="sync-icon" />
-              <span>Coba Hubungkan Lagi</span>
-            </button>
-          </div>
-        ) : sortedItems.length === 0 ? (
-          <div className="empty-state mobile-empty">
-            <Layers size={36} className="empty-icon" />
-            <h4>Tidak ada data precosting di database</h4>
-            <p>Data tabel "PrecostingHeader" kosong atau filter pencarian tidak sesuai.</p>
-          </div>
-        ) : (
-          sortedItems.map((item) => {
-            const targetQty = Number(item.targetQty || item.ProdQty || 1000);
-            const consmVal = Number(item.consm ?? item.Consume ?? item.mainFabricConsumption ?? item.fabrics?.[0]?.consumption ?? 0);
-            const consmUnit = item.mainFabricUnit === 'Meter' ? 'm' : (item.mainFabricUnit || 'm');
+      {viewMode === 'card' && (
+        <div className="card-view-wrapper">
+          {isLoading ? (
+            <div className="empty-state mobile-empty">
+              <RotateCw size={32} className="empty-icon spin-animation" />
+              <h4>Memuat data dari PostgreSQL...</h4>
+              <p>Mengambil data precosting dari API.</p>
+            </div>
+          ) : apiError && precostings.length === 0 ? (
+            <div className="empty-state mobile-empty">
+              <AlertTriangle size={36} className="empty-icon text-amber" />
+              <h4>Koneksi API Gagal</h4>
+              <p>{apiError}</p>
+              <button
+                type="button"
+                className="btn-sync-refresh"
+                style={{ marginTop: '12px', display: 'inline-flex' }}
+                onClick={refreshFromBackend}
+              >
+                <RotateCw size={14} className="sync-icon" />
+                <span>Coba Hubungkan Lagi</span>
+              </button>
+            </div>
+          ) : sortedItems.length === 0 ? (
+            <div className="empty-state mobile-empty">
+              <Layers size={36} className="empty-icon" />
+              <h4>Tidak ada data precosting di database</h4>
+              <p>Data tabel "PrecostingHeader" kosong atau filter pencarian tidak sesuai.</p>
+            </div>
+          ) : (
+            sortedItems.map((item) => {
+              const targetQty = Number(item.targetQty || item.ProdQty || 1000);
+              const consmVal = Number(item.consm ?? item.Consume ?? item.mainFabricConsumption ?? item.fabrics?.[0]?.consumption ?? 0);
+              const consmUnit = item.mainFabricUnit === 'Meter' ? 'm' : (item.mainFabricUnit || 'm');
 
-            const fabricPrice = Number(
-              item.fabricPrice ??
-              item.FabricPrice ??
-              item.hargaFabric ??
-              item.mainFabricUnitPrice ??
-              item.fabrics?.[0]?.unitPrice ??
-              0
-            );
+              const fabricPrice = Number(
+                item.fabricPrice ??
+                item.FabricPrice ??
+                item.hargaFabric ??
+                item.mainFabricUnitPrice ??
+                item.fabrics?.[0]?.unitPrice ??
+                0
+              );
 
-            let totalFabricPerPcs = Number(
-              item.fabricCostPerPcs ??
-              item.totalKainPerPcs ??
-              item.totalKain ??
-              item.totalFabric ??
-              item.TotalFabricPrice ??
-              0
-            );
-            if (totalFabricPerPcs > 100000 && targetQty > 1 && (fabricPrice === 0 || totalFabricPerPcs > fabricPrice * 2)) {
-              totalFabricPerPcs = Math.round(totalFabricPerPcs / targetQty);
-            }
-            if (totalFabricPerPcs === 0 && consmVal > 0 && fabricPrice > 0) {
-              totalFabricPerPcs = Math.round(consmVal * fabricPrice);
-            }
+              let totalFabricPerPcs = Number(
+                item.fabricCostPerPcs ??
+                item.totalKainPerPcs ??
+                item.totalKain ??
+                item.totalFabric ??
+                item.TotalFabricPrice ??
+                0
+              );
+              if (totalFabricPerPcs > 100000 && targetQty > 1 && (fabricPrice === 0 || totalFabricPerPcs > fabricPrice * 2)) {
+                totalFabricPerPcs = Math.round(totalFabricPerPcs / targetQty);
+              }
+              if (totalFabricPerPcs === 0 && consmVal > 0 && fabricPrice > 0) {
+                totalFabricPerPcs = Math.round(consmVal * fabricPrice);
+              }
 
-            let cmtPriceVal = Number(
-              item.jasaCostPerPcs ??
-              item.cmtCostPerPcs ??
-              item.cmtPrice ??
-              item.hargaCmt ??
-              item.CMTPrice ??
-              0
-            );
-            if (cmtPriceVal > 500000 && targetQty > 1) {
-              cmtPriceVal = Math.round(cmtPriceVal / targetQty);
-            }
+              let cmtPriceVal = Number(
+                item.jasaCostPerPcs ??
+                item.cmtCostPerPcs ??
+                item.cmtPrice ??
+                item.hargaCmt ??
+                item.CMTPrice ??
+                0
+              );
+              if (cmtPriceVal > 500000 && targetQty > 1) {
+                cmtPriceVal = Math.round(cmtPriceVal / targetQty);
+              }
 
-            let accPriceVal = Number(
-              item.accCostPerPcs ??
-              item.accessoriesCostPerPcs ??
-              item.accPrice ??
-              item.hargaAccessories ??
-              item.AccPrice ??
-              0
-            );
-            if (accPriceVal > 50000 && targetQty > 1 && (item.hpp ? accPriceVal > Number(item.hpp) : true)) {
-              accPriceVal = Math.round(accPriceVal / targetQty);
-            }
+              let accPriceVal = Number(
+                item.accCostPerPcs ??
+                item.accessoriesCostPerPcs ??
+                item.accPrice ??
+                item.hargaAccessories ??
+                item.AccPrice ??
+                0
+              );
+              if (accPriceVal > 50000 && targetQty > 1 && (item.hpp ? accPriceVal > Number(item.hpp) : true)) {
+                accPriceVal = Math.round(accPriceVal / targetQty);
+              }
 
-            let hppVal = Number(item.hppPerPcs ?? item.hpp ?? item.HPP ?? 0);
-            if (hppVal === 0) {
-              const base = totalFabricPerPcs + cmtPriceVal + accPriceVal;
-              hppVal = base > 0 ? Math.round(base * 1.025) : 0;
-            }
+              let hppVal = Number(item.hppPerPcs ?? item.hpp ?? item.HPP ?? 0);
+              if (hppVal === 0) {
+                const base = totalFabricPerPcs + cmtPriceVal + accPriceVal;
+                hppVal = base > 0 ? Math.round(base * 1.025) : 0;
+              }
 
-            const ppnVal = Number(item.ppnPerPcs ?? item.taxPrice ?? item.TaxPrice ?? item.ppn ?? Math.round(hppVal * 0.11));
+              const ppnVal = Number(item.ppnPerPcs ?? item.taxPrice ?? item.TaxPrice ?? item.ppn ?? Math.round(hppVal * 0.11));
 
-            return (
-              <div key={item.id} className="mobile-precost-card">
-                {/* Card Top Row: Image + Header info */}
-                <div className="card-top-row">
-                  <img
-                    src={decodeBase64Image(item.image)}
-                    alt={item.itemName}
-                    className="card-thumb-img"
-                    onClick={() => selectPrecosting(item.id)}
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = '/images/shirt.jpg';
-                    }}
-                  />
-                  <div className="card-header-texts">
-                    <div className="card-precost-line">
+              return (
+                <div key={item.id} className="mobile-precost-card">
+                  {/* Card Header Strip: Precosting No + Qty (Left) & Status Badges (Right) */}
+                  <div className="card-header-bar">
+                    <div className="card-header-left">
                       <span className="card-precosting-no font-mono">{item.precostingNo}</span>
                       <span className="card-qty-badge font-mono">{formatNumber(item.targetQty)} Pcs</span>
                     </div>
-                    <div
-                      className="card-item-title"
+                    <div className="card-status-wrapper">
+                      {getStatusBadge(item.status)}
+                      {getSyncBadge(item.sync_status)}
+                    </div>
+                  </div>
+
+                  {/* Card Main Info: Image + Full-Width Style Title + Category */}
+                  <div className="card-body-section">
+                    <img
+                      src={decodeBase64Image(item.image)}
+                      alt={item.itemName}
+                      className="card-thumb-img"
+                      onClick={() => selectPrecosting(item.id)}
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = '/images/shirt.jpg';
+                      }}
+                    />
+                    <div className="card-info-content">
+                      <div
+                        className="card-item-title"
+                        onClick={() => selectPrecosting(item.id)}
+                      >
+                        {item.itemName}
+                      </div>
+                      <div className="card-item-category">
+                        {item.category} {item.buyer && `• ${item.buyer}`}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Financial Metric Grid: Consm, Fabric, Total Kain, CMT, Acc, HPP, PPN */}
+                  <div className="card-costs-grid-compact">
+                    <div className="card-cost-box">
+                      <span className="box-label">Consm</span>
+                      <span className="box-val font-mono">
+                        {consmVal} {consmUnit}
+                      </span>
+                    </div>
+                    <div className="card-cost-box">
+                      <span className="box-label">Harga Fabric</span>
+                      <span className="box-val font-mono">{formatRupiah(fabricPrice)}</span>
+                    </div>
+                    <div className="card-cost-box highlight-cost-box">
+                      <span className="box-label">Total Kain</span>
+                      <span className="box-val font-mono text-fabric font-bold">{formatRupiah(totalFabricPerPcs)}</span>
+                    </div>
+                    <div className="card-cost-box">
+                      <span className="box-label">Harga CMT</span>
+                      <span className="box-val font-mono text-jasa font-semibold">{formatRupiah(cmtPriceVal)}</span>
+                    </div>
+                    <div className="card-cost-box">
+                      <span className="box-label">Harga Acc</span>
+                      <span className="box-val font-mono text-acc font-semibold">{formatRupiah(accPriceVal)}</span>
+                    </div>
+                    <div className="card-cost-box highlight-hpp-box">
+                      <span className="box-label">HPP / Pcs</span>
+                      <span className="box-val font-mono text-hpp font-bold">{formatRupiah(hppVal)}</span>
+                    </div>
+                    <div className="card-cost-box">
+                      <span className="box-label">PPN (11%)</span>
+                      <span className="box-val font-mono text-ppn font-semibold">{formatRupiah(ppnVal)}</span>
+                    </div>
+                  </div>
+
+                  {/* Card Action Buttons */}
+                  <div className="card-actions-row">
+                    <button
+                      type="button"
+                      className="card-btn btn-view-detail"
                       onClick={() => selectPrecosting(item.id)}
                     >
-                      {item.itemName}
-                    </div>
-                    <div className="card-item-category">
-                      {item.category} {item.buyer && `• ${item.buyer}`}
-                    </div>
-                  </div>
-                  <div className="card-status-wrapper" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                    {getStatusBadge(item.status)}
-                    {getSyncBadge(item.sync_status)}
+                      <Eye size={14} />
+                      <span>Detail</span>
+                    </button>
+
+                    {(() => {
+                      const itemStatus = (item.status || item.Status || '').toLowerCase().trim();
+                      const isConfirmed = itemStatus === 'confirmed' || itemStatus === 'approved' || itemStatus === 'confirm';
+                      const isRejected = itemStatus === 'rejected' || itemStatus === 'reject' || itemStatus === 'revision';
+                      const isPending = !isConfirmed && !isRejected;
+
+                      if (isPending) {
+                        return (
+                          <>
+                            <button
+                              type="button"
+                              className="card-btn btn-approve"
+                              onClick={() => handleApprove(item)}
+                            >
+                              <CheckCircle2 size={14} />
+                              <span>Approve</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              className="card-btn btn-not-approve"
+                              onClick={() => setRejectModalItem(item)}
+                            >
+                              <XCircle size={14} />
+                              <span>Reject</span>
+                            </button>
+                          </>
+                        );
+                      }
+
+                      if (isConfirmed) {
+                        return (
+                          <span className="badge badge-success" style={{ padding: '6px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <CheckCircle2 size={13} /> Confirmed
+                          </span>
+                        );
+                      }
+
+                      if (isRejected) {
+                        return (
+                          <span className="badge badge-danger" style={{ padding: '6px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <XCircle size={13} /> Rejected
+                          </span>
+                        );
+                      }
+
+                      return null;
+                    })()}
                   </div>
                 </div>
-
-                {/* Financial Metric Grid: Consm, Fabric, Total Kain, CMT, Acc, HPP, PPN */}
-                <div className="card-costs-grid-compact">
-                  <div className="card-cost-box">
-                    <span className="box-label">Consm</span>
-                    <span className="box-val font-mono">
-                      {consmVal} {consmUnit}
-                    </span>
-                  </div>
-                  <div className="card-cost-box">
-                    <span className="box-label">Harga Fabric</span>
-                    <span className="box-val font-mono">{formatRupiah(fabricPrice)}</span>
-                  </div>
-                  <div className="card-cost-box highlight-cost-box">
-                    <span className="box-label">Total Kain</span>
-                    <span className="box-val font-mono text-fabric font-bold">{formatRupiah(totalFabricPerPcs)}</span>
-                  </div>
-                  <div className="card-cost-box">
-                    <span className="box-label">Harga CMT</span>
-                    <span className="box-val font-mono text-jasa font-semibold">{formatRupiah(cmtPriceVal)}</span>
-                  </div>
-                  <div className="card-cost-box">
-                    <span className="box-label">Harga Acc</span>
-                    <span className="box-val font-mono text-acc font-semibold">{formatRupiah(accPriceVal)}</span>
-                  </div>
-                  <div className="card-cost-box highlight-hpp-box">
-                    <span className="box-label">HPP / Pcs</span>
-                    <span className="box-val font-mono text-hpp font-bold">{formatRupiah(hppVal)}</span>
-                  </div>
-                  <div className="card-cost-box">
-                    <span className="box-label">PPN (11%)</span>
-                    <span className="box-val font-mono text-ppn font-semibold">{formatRupiah(ppnVal)}</span>
-                  </div>
-                </div>
-
-                {/* Card Action Buttons */}
-                <div className="card-actions-row">
-                  <button
-                    type="button"
-                    className="card-btn btn-view-detail"
-                    onClick={() => selectPrecosting(item.id)}
-                  >
-                    <Eye size={14} />
-                    <span>Detail</span>
-                  </button>
-
-                  {(() => {
-                    const itemStatus = (item.status || item.Status || '').toLowerCase().trim();
-                    const isConfirmed = itemStatus === 'confirmed' || itemStatus === 'approved' || itemStatus === 'confirm';
-                    const isRejected = itemStatus === 'rejected' || itemStatus === 'reject' || itemStatus === 'revision';
-                    const isPending = !isConfirmed && !isRejected;
-
-                    if (isPending) {
-                      return (
-                        <>
-                          <button
-                            type="button"
-                            className="card-btn btn-approve"
-                            onClick={() => handleApprove(item)}
-                          >
-                            <CheckCircle2 size={14} />
-                            <span>Approve</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            className="card-btn btn-not-approve"
-                            onClick={() => setRejectModalItem(item)}
-                          >
-                            <XCircle size={14} />
-                            <span>Reject</span>
-                          </button>
-                        </>
-                      );
-                    }
-
-                    if (isConfirmed) {
-                      return (
-                        <span className="badge badge-success" style={{ padding: '6px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <CheckCircle2 size={13} /> Confirmed
-                        </span>
-                      );
-                    }
-
-                    if (isRejected) {
-                      return (
-                        <span className="badge badge-danger" style={{ padding: '6px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <XCircle size={13} /> Rejected
-                        </span>
-                      );
-                    }
-
-                    return null;
-                  })()}
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+              );
+            })
+          )}
+        </div>
+      )}
     </div>
   );
 };
